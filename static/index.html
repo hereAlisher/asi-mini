@@ -866,7 +866,7 @@
         const score = num(a.host_score);
         const fp = [
           http.title ? `<div class="text-slate-200 font-semibold">${esc(http.title)}</div>` : "",
-          `<div class="text-slate-400">HTTP ${esc(http.status ?? "—")} · ${esc(http.server || "—")}${http.x_powered_by ? " · " + esc(http.x_powered_by) : ""}</div>`,
+          `<div class="text-slate-400">HTTP ${esc(http.status ?? "—")} · ${esc(http.server || "—")}${http.x_powered_by ? " · " + esc(http.x_powered_by) : ""}${http.response_time_ms != null ? ` · <span class="text-amber-300">${esc(http.response_time_ms)} ms</span>` : ""}${http.timeout ? ` · <span class="text-rose-300">timeout</span>` : ""}</div>`,
           `<div class="text-slate-500">Cookies: ${esc(cookies)}</div>`,
           `<div class="text-slate-500">Tech: ${esc(tech)}</div>`,
           http.footer_version ? `<div class="text-slate-500">Footer: ${esc(http.footer_version)}</div>` : "",
@@ -1402,7 +1402,7 @@
       const delta = num(d.score_delta);
       const deltaColor = delta > 0 ? SEVERITY_COLOR.CRITICAL : delta < 0 ? SEVERITY_COLOR.LOW : "#94a3b8";
       const assetLine = (a) => `<div class="text-[11px] flex flex-wrap items-center gap-1.5"><span class="font-mono text-cyan-300">${esc(a.host)}</span>${stabilityBadge(a.stability, a.confidence_pct)}<span class="text-slate-500">${esc(list(a.ips).join(", ")||list(a.cnames).join(", ")||"—")}</span></div>`;
-      const changedLine = (c) => `<div class="text-[11px] space-y-0.5"><div class="flex flex-wrap items-center gap-1.5"><span class="font-mono text-cyan-300">${esc(c.host)}</span>${c.went_offline?`<span class="badge st-inactive">went offline</span>`:""}${stabilityBadge(c.stability, c.confidence_pct)}</div>${list(c.added).length?`<div class="text-emerald-300">+ ${esc(list(c.added).join(", "))}</div>`:""}${list(c.removed).length?`<div class="text-rose-300">− ${esc(list(c.removed).join(", "))}</div>`:""}</div>`;
+      const changedLine = (c) => `<div class="text-[11px] space-y-0.5"><div class="flex flex-wrap items-center gap-1.5"><span class="font-mono text-cyan-300">${esc(c.host)}</span>${c.went_offline?`<span class="badge st-inactive">went offline</span>`:""}${c.latency_jump_ms != null?`<span class="badge" style="background:#431407;color:#fed7aa;border-color:#c2410c">latency ${c.latency_jump_ms>0?"+":""}${esc(c.latency_jump_ms)} ms</span>`:""}${c.timeout_changed?`<span class="badge" style="background:#450a0a;color:#fecaca;border-color:#991b1b">timeout changed</span>`:""}${c.after_response_time_ms != null?`<span class="text-[10px] text-slate-400">${esc(c.after_response_time_ms)} ms</span>`:""}${stabilityBadge(c.stability, c.confidence_pct)}</div>${list(c.added).length?`<div class="text-emerald-300">+ ${esc(list(c.added).join(", "))}</div>`:""}${list(c.removed).length?`<div class="text-rose-300">− ${esc(list(c.removed).join(", "))}</div>`:""}</div>`;
       const findingLine = (f) => `<div class="text-[11px] flex flex-wrap items-center gap-1.5">${severityBadge(f.severity)}<span class="text-slate-200">${esc(f.title)}</span><span class="font-mono text-slate-500">${esc(f.host)}</span>${f.cve?`<span class="chip">${esc(f.cve)}</span>`:""}</div>`;
       $("diffResult").innerHTML = `
         <div class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-2">

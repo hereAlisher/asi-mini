@@ -848,7 +848,13 @@ def _compute_stability(row: dict) -> tuple[str, int]:
     last = row.get("last_status")
     ratio = seen / scans
     if last == "reachable":
-        stability = "active" if ratio >= 0.6 else "flaky"
+        # Active requires perfect attendance (seen every scan). A host that missed
+        # any scan (e.g. 127.0.0.1:8787 seen 2/3) is downgraded to flaky even when
+        # it is reachable again, so disappearing/returning ports are visible.
+        if seen >= scans:
+            stability = "active"
+        else:
+            stability = "flaky"
     elif last == "unreachable":
         if seen == 0:
             stability = "unreachable"
@@ -859,7 +865,7 @@ def _compute_stability(row: dict) -> tuple[str, int]:
     else:
         stability = "flaky" if missed <= 1 else "inactive"
     if stability == "active":
-        confidence = min(99, max(70, round(ratio * 100)))
+        confidence = min(99, max(90, round(ratio * 100)))
     elif stability == "flaky":
         confidence = max(35, round(ratio * 60))
     elif stability == "inactive":

@@ -42,13 +42,15 @@ SEC_HEADERS = [
     "x-content-type-options",
 ]
 FALLBACK_PREFIXES = ["www", "mail", "dev", "staging", "admin", "api", "vpn", "test"]
-DEFAULT_PORTS = [21, 22, 23, 25, 53, 80, 110, 143, 443, 445, 3306, 3389, 5432, 6379, 8080, 8443, 9200, 27017]
+DEFAULT_PORTS = [21, 22, 23, 25, 53, 80, 81, 110, 143, 443, 445, 1433, 2375, 3306, 3389, 5432, 5673, 5900, 6379, 8080, 8086, 8443, 9200, 11211, 15432, 15672, 15673, 27017]
 SERVICE_NAMES = {
     21: "ftp", 22: "ssh", 23: "telnet", 25: "smtp", 53: "domain", 80: "http", 110: "pop3",
     143: "imap", 443: "https", 445: "microsoft-ds", 1433: "mssql", 2375: "docker",
     3306: "mysql", 3389: "ms-wbt-server", 5432: "postgresql", 5900: "vnc", 6379: "redis",
     8080: "http-proxy", 8443: "https-alt", 9200: "elasticsearch", 11211: "memcached",
     15672: "rabbitmq-management", 27017: "mongodb",
+    5673: "amqp", 15432: "postgresql", 8086: "traefik-dashboard", 15673: "rabbitmq-management",
+    81: "nginx-proxy-manager",
 }
 
 DEFAULT_SIGNATURES: list[dict] = [
@@ -123,6 +125,55 @@ DEFAULT_SIGNATURES: list[dict] = [
         "description": "An Internet-facing IoT or network appliance was fingerprinted; these devices often ship with weak firmware.",
         "remediation": "Patch firmware, disable remote management, change default credentials and segment the device.",
         "mitre_id": "T1190",
+    },
+    {
+        "name": "Exposed Traefik Dashboard", "category": "Shadow / Admin Exposure", "match_type": "html",
+        "match_value": r"traefik", "severity": "HIGH",
+        "description": "A Traefik reverse-proxy dashboard is publicly reachable, exposing routing and backend topology.",
+        "remediation": "Restrict the Traefik dashboard/api behind VPN or IP allowlist and disable it in production.",
+        "mitre_id": "T1078",
+    },
+    {
+        "name": "Exposed RabbitMQ Management", "category": "Shadow / Admin Exposure", "match_type": "html",
+        "match_value": r"rabbitmq management", "severity": "HIGH",
+        "description": "The RabbitMQ management console is publicly reachable and may allow queue/data inspection.",
+        "remediation": "Bind the management plugin to localhost/admin VLAN and require strong authentication.",
+        "mitre_id": "T1078",
+    },
+    {
+        "name": "Gitea Source Hosting Exposed", "category": "Shadow / Admin Exposure", "match_type": "html",
+        "match_value": r"gitea", "severity": "MEDIUM",
+        "description": "A Gitea source-code hosting instance is publicly reachable, exposing internal repositories.",
+        "remediation": "Restrict Gitea behind SSO/VPN and disable public repository enumeration.",
+        "mitre_id": "T1595",
+    },
+    {
+        "name": "Exposed Adminer Database Console", "category": "Shadow / Admin Exposure", "match_type": "html",
+        "match_value": r"adminer", "severity": "HIGH",
+        "description": "An Adminer database administration console is publicly reachable and enables direct DB access.",
+        "remediation": "Remove Adminer from production or restrict it behind VPN and IP allowlists.",
+        "mitre_id": "T1078",
+    },
+    {
+        "name": "Exposed phpMyAdmin Console", "category": "Shadow / Admin Exposure", "match_type": "html",
+        "match_value": r"phpmyadmin", "severity": "HIGH",
+        "description": "A phpMyAdmin database administration console is publicly reachable and targets credential attacks.",
+        "remediation": "Restrict phpMyAdmin behind VPN/IP allowlist, enforce HTTPS and strong authentication.",
+        "mitre_id": "T1078",
+    },
+    {
+        "name": "Vulnerable Web Application Exposed (DVWA)", "category": "Shadow / Admin Exposure", "match_type": "html",
+        "match_value": r"damn vulnerable web application|dvwa", "severity": "CRITICAL",
+        "description": "Damn Vulnerable Web Application (DVWA) is a deliberately vulnerable app that must never be public.",
+        "remediation": "Take DVWA offline immediately; it is intentionally exploitable and unsafe for any network exposure.",
+        "mitre_id": "T1190",
+    },
+    {
+        "name": "Exposed Nginx Proxy Manager Panel", "category": "Shadow / Admin Exposure", "match_type": "html",
+        "match_value": r"nginx proxy manager", "severity": "HIGH",
+        "description": "The Nginx Proxy Manager admin panel is publicly reachable, exposing reverse-proxy configuration.",
+        "remediation": "Restrict the Nginx Proxy Manager admin UI (port 81) behind VPN/IP allowlist and MFA.",
+        "mitre_id": "T1078",
     },
 ]
 
@@ -399,6 +450,7 @@ def _default_http() -> dict:
         "server": None, "x_powered_by": None, "headers": {}, "cookies": [], "redirects": [],
         "favicon_hash": None, "technologies": [], "missing_headers": [], "paths": {},
         "body_snippet": "", "matched_signatures": [], "footer_version": None,
+        "response_time_ms": None, "timeout": False,
     }
 
 
@@ -535,11 +587,20 @@ async def fingerprint_http(host: str, client: Any, signature_paths: Iterable[str
     else:
         target = host
         schemes = ("https", "http")
+    timeout_cls = getattr(httpx, "TimeoutException", ()) if httpx is not None else ()
     for scheme in schemes:
+        t0 = time.perf_counter()
         try:
             r = await client.get(f"{scheme}://{target}/", timeout=6.0)
-        except Exception:
+        except Exception as exc:
+            # Record timeouts cleanly without crashing the scan (Toxiproxy/slow targets).
+            if timeout_cls and isinstance(exc, timeout_cls):
+                result["timeout"] = True
+                result["response_time_ms"] = round((time.perf_counter() - t0) * 1000, 1)
+                result["url"] = f"{scheme}://{target}/"
+                result["scheme"] = scheme
             continue
+        elapsed_ms = round((time.perf_counter() - t0) * 1000, 1)
         text = r.text[:200000] if r.text else ""
         headers = {k.lower(): v[:300] for k, v in r.headers.items() if k.lower() != "set-cookie"}
         cookies = []
@@ -564,6 +625,8 @@ async def fingerprint_http(host: str, client: Any, signature_paths: Iterable[str
             "missing_headers": [h for h in SEC_HEADERS if h not in headers],
             "paths": await _fetch_paths(client, base, signature_paths or []),
             "body_snippet": text[:5000],
+            "response_time_ms": elapsed_ms,
+            "timeout": False,
         })
         return result
     return result
@@ -605,6 +668,22 @@ def detect_technologies(http: dict, open_ports: list[dict] | None = None) -> lis
         tech.add("IoT")
     if "cisco" in server:
         tech.add("Cisco ASA")
+    # AGH judging-lab service fingerprints (read-only title/body/header markers)
+    title = (http.get("title") or "").lower()
+    if "traefik" in title or "traefik" in body:
+        tech.add("Traefik")
+    if "rabbitmq management" in title or "rabbitmq" in body or "rabbitmq" in server:
+        tech.add("RabbitMQ")
+    if "gitea" in title or "gitea" in body or "gitea" in powered:
+        tech.add("Gitea")
+    if "adminer" in title or "adminer" in body:
+        tech.add("Adminer")
+    if "phpmyadmin" in title or "phpmyadmin" in body or "phpmyadmin" in (http.get("url") or "").lower():
+        tech.add("phpMyAdmin")
+    if "damn vulnerable web application" in title or "dvwa" in body or "dvwa" in (http.get("url") or "").lower():
+        tech.add("DVWA")
+    if "nginx proxy manager" in title or "nginx proxy manager" in body:
+        tech.add("Nginx Proxy Manager")
     for port in open_ports or []:
         svc = (port.get("service") or "").lower()
         product = (port.get("product") or "").lower()

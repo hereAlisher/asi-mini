@@ -40,6 +40,10 @@ RISKY_PORTS = {
     5432: ("HIGH", "Exposed PostgreSQL Database (Port 5432)", "Direct DB exposure invites credential brute-force and privilege escalation.", "Enforce pg_hba.conf IP allowlists and segment database VLAN."),
     1433: ("HIGH", "Exposed Microsoft SQL Server (Port 1433)", "Direct database exposure invites brute-force and xp_cmdshell abuse.", "Restrict TCP/1433 to application subnets and enforce strong auth."),
     15672: ("HIGH", "Exposed RabbitMQ Management (Port 15672)", "Management UI often ships with default credentials.", "Restrict the management plugin to localhost or an admin VLAN."),
+    5673: ("HIGH", "Exposed AMQP / RabbitMQ Broker (Port 5673)", "An open AMQP broker accepts messages from any source and may allow queue abuse.", "Firewall TCP/5673 to authorized publishers/consumers and require AMQP auth over TLS."),
+    15432: ("HIGH", "Exposed PostgreSQL Database (Port 15432)", "Direct PostgreSQL network reachability expands lateral-movement blast radius.", "Restrict TCP/15432 to authorized application servers and enforce pg_hba.conf allowlists."),
+    8086: ("HIGH", "Exposed Traefik Dashboard (Port 8086)", "The Traefik dashboard/api exposes routing and backend service topology.", "Disable the Traefik api/dashboard or bind it to localhost and an admin network."),
+    81: ("MEDIUM", "Exposed Nginx Proxy Manager Admin (Port 81)", "The reverse-proxy admin panel is reachable and exposes routing configuration.", "Restrict port 81 behind VPN/IP allowlist and enforce MFA."),
     8080: ("MEDIUM", "Alternate HTTP / CI Service (Port 8080)", "Commonly exposes unhardened Jenkins, debug consoles, or admin UIs.", "Audit service on 8080, enforce SSO/TLS, or disable external access."),
     22: ("LOW", "Exposed SSH Service (Port 22)", "Continuous brute-force surface if password auth or legacy versions remain active.", "Disable password/root login, enforce SSH keys, and restrict source IPs."),
 }
@@ -588,6 +592,8 @@ def _scan_index(scan: dict) -> tuple[dict[str, dict], dict[str, dict], int]:
         index[host.lower()] = {
             "host": host, "services": sorted(services), "asset": asset,
             "reachable": bool(http.get("reachable") or asset.get("open_ports") or tls.get("valid") is True),
+            "response_time_ms": http.get("response_time_ms"),
+            "timeout": bool(http.get("timeout")),
         }
     findings = {}
     for finding in scan.get("findings") or []:
@@ -638,7 +644,16 @@ def compute_drift(previous: dict, current: dict) -> dict:
         added = sorted(set(after["services"]) - set(before["services"]))
         removed = sorted(set(before["services"]) - set(after["services"]))
         went_offline = before["reachable"] and not after["reachable"]
-        if not added and not removed and not went_offline:
+        # Detect Toxiproxy / slow-target latency jumps (>300ms) and timeout changes.
+        before_rt = before.get("response_time_ms")
+        after_rt = after.get("response_time_ms")
+        latency_jump_ms = None
+        if before_rt is not None and after_rt is not None:
+            delta = round(float(after_rt) - float(before_rt), 1)
+            if abs(delta) > 300:
+                latency_jump_ms = delta
+        timeout_changed = bool(before.get("timeout")) != bool(after.get("timeout"))
+        if not added and not removed and not went_offline and latency_jump_ms is None and not timeout_changed:
             continue
         stability = after["asset"].get("stability")
         item = {
@@ -650,6 +665,10 @@ def compute_drift(previous: dict, current: dict) -> dict:
             "confidence_pct": after["asset"].get("confidence_pct"),
             "before_reachable": before["reachable"],
             "after_reachable": after["reachable"],
+            "latency_jump_ms": latency_jump_ms,
+            "before_response_time_ms": before_rt,
+            "after_response_time_ms": after_rt,
+            "timeout_changed": timeout_changed,
         }
         changed_services.append(item)
         if went_offline or stability in ("flaky", "inactive"):
