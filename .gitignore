@@ -11,3 +11,6 @@ __pycache__/
 opencode.json
 AGENTS.md
 GEMINI.md
+demo_out/
+record_demo_pl.py
+record_demo.py
