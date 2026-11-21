@@ -1,5 +1,5 @@
 ﻿<!DOCTYPE html>
-<html lang="en" class="dark">
+<html lang="pl" class="dark">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -7,374 +7,1217 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://unpkg.com/cytoscape@3.30.2/dist/cytoscape.min.js"></script>
   <style>
-    body { background: #070b14; color: #e2e8f0; font-family: ui-sans-serif, system-ui, sans-serif; }
-    #cy { width: 100%; height: 470px; background: radial-gradient(circle at center, #0f172a 0%, #070b14 100%); }
+    :root { color-scheme: dark; }
+    body {
+      background:
+        radial-gradient(900px 500px at 12% -10%, rgba(8,145,178,.16), transparent 60%),
+        radial-gradient(800px 500px at 100% 0%, rgba(124,58,237,.12), transparent 55%),
+        #070b14;
+      color: #e2e8f0;
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    }
+    .card { background: rgba(15,23,42,.82); border: 1px solid #1e293b; border-radius: 14px; }
+    .card-h { border-bottom: 1px solid #1e293b; padding: .75rem .9rem; display:flex; align-items:center; justify-content:space-between; gap:.5rem; }
+    .card-b { padding: .9rem; }
+    .btn { display:inline-flex; align-items:center; gap:.4rem; border-radius:9px; border:1px solid #334155; background:#0f172a; color:#cbd5e1; font-size:.76rem; font-weight:600; padding:.45rem .75rem; transition:.15s; white-space:nowrap; cursor:pointer; }
+    .btn:disabled { opacity:.55; cursor:not-allowed; filter:grayscale(.4); }
+    .btn:hover:not(:disabled) { background:#1e293b; border-color:#475569; color:#fff; }
+    .btn-primary { background:#0891b2; border-color:#22d3ee; color:#031018; }
+    .btn-primary:hover:not(:disabled) { background:#06b6d4; color:#031018; }
+    .btn-danger { background:#450a0a; border-color:#991b1b; color:#fecaca; }
+    .btn-danger:hover:not(:disabled) { background:#7f1d1d; color:#fff; }
+    .btn-ghost { background:transparent; border-color:#1e293b; color:#94a3b8; }
+    .btn-ghost:hover:not(:disabled) { background:#0f172a; color:#e2e8f0; border-color:#475569; }
+    .input { width:100%; background:#0b1220; border:1px solid #263449; border-radius:9px; color:#e2e8f0; font-size:.8rem; padding:.52rem .62rem; outline:none; }
+    .input:focus { border-color:#22d3ee; box-shadow:0 0 0 2px rgba(34,211,238,.15); }
+    .input::placeholder { color:#5b6b85; }
+    .label { display:block; font-size:.66rem; text-transform:uppercase; letter-spacing:.08em; color:#7c8ba1; margin-bottom:.28rem; font-weight:700; }
+    .badge { display:inline-flex; align-items:center; gap:.25rem; border-radius:999px; padding:.14rem .5rem; font-size:.64rem; font-weight:800; letter-spacing:.03em; border:1px solid transparent; white-space:nowrap; }
+    .tab-btn { border-radius:10px; padding:.55rem .85rem; font-size:.78rem; font-weight:700; color:#94a3b8; border:1px solid transparent; cursor:pointer; }
+    .tab-btn:hover { color:#e2e8f0; background:#0f172a; }
+    .tab-btn.active { color:#67e8f9; background:rgba(8,145,178,.14); border-color:rgba(34,211,238,.35); }
+    .sev-CRITICAL { background:#450a0a; color:#fecaca; border-color:#b91c1c; }
+    .sev-HIGH { background:#431407; color:#fed7aa; border-color:#c2410c; }
+    .sev-MEDIUM { background:#422006; color:#fde68a; border-color:#a16207; }
+    .sev-LOW { background:#052e16; color:#bbf7d0; border-color:#15803d; }
+    .sev-INFO { background:#0c4a6e; color:#bae6fd; border-color:#0369a1; }
+    .st-active { background:#052e16; color:#86efac; border-color:#166534; }
+    .st-flaky { background:#422006; color:#fde68a; border-color:#a16207; }
+    .st-inactive, .st-unreachable { background:#450a0a; color:#fecaca; border-color:#991b1b; }
+    .modal { position:fixed; inset:0; z-index:60; display:grid; place-items:center; padding:1rem; background:rgba(2,6,23,.85); backdrop-filter:blur(6px); }
+    .modal.hidden { display:none; }
+    .modal-box { width:100%; max-width:620px; background:#0b1220; border:1px solid #263449; border-radius:16px; box-shadow:0 30px 90px rgba(0,0,0,.7); }
+    #cy { width:100%; height:470px; background:radial-gradient(circle at center,#0f172a 0%,#070b14 100%); border-radius:10px; border:1px solid #1e293b; }
+    .scroll-thin::-webkit-scrollbar { width:8px; height:8px; }
+    .scroll-thin::-webkit-scrollbar-thumb { background:#334155; border-radius:8px; }
+    .scroll-thin::-webkit-scrollbar-track { background:transparent; }
+    table { border-collapse:separate; border-spacing:0; width:100%; }
+    th { font-size:.64rem; text-transform:uppercase; letter-spacing:.07em; color:#7c8ba1; text-align:left; padding:.55rem .65rem; border-bottom:1px solid #1e293b; white-space:nowrap; }
+    td { font-size:.73rem; padding:.55rem .65rem; border-bottom:1px solid rgba(30,41,59,.55); vertical-align:top; }
+    tr:hover td { background:rgba(30,41,59,.35); }
+    .chip { border:1px solid #334155; background:#0f172a; border-radius:999px; padding:.1rem .45rem; font-size:.62rem; color:#cbd5e1; }
+    .kpi-value { font-size:1.4rem; font-weight:800; color:#f8fafc; line-height:1.1; }
+    .kpi-label { font-size:.62rem; text-transform:uppercase; letter-spacing:.08em; color:#7c8ba1; font-weight:700; }
+    .fade-in { animation: fade .18s ease-out; }
+    @keyframes fade { from { opacity:0; transform:translateY(3px);} to {opacity:1; transform:none;} }
+    .hidden { display:none !important; }
   </style>
 </head>
-<body class="min-h-screen p-4 md:p-6">
-  <div class="max-w-7xl mx-auto space-y-5">
+<body class="min-h-screen p-3 md:p-5">
+  <div class="max-w-[1500px] mx-auto space-y-4">
 
-    <!-- Top Control Bar -->
-    <header class="flex flex-col xl:flex-row xl:items-center justify-between gap-4 bg-slate-900/80 border border-slate-800 rounded-xl p-4">
-      <div>
-        <div class="flex items-center gap-2">
-          <span class="h-2.5 w-2.5 rounded-full bg-cyan-400 animate-pulse"></span>
-          <h1 class="text-lg font-bold tracking-wide text-white">ASI MINI <span class="text-cyan-400 font-normal">// Attack Surface Intelligence</span></h1>
+    <!-- Header / RBAC auth bar -->
+    <header class="card px-4 py-3 flex flex-col xl:flex-row xl:items-center justify-between gap-3">
+      <div class="flex items-center gap-3">
+        <div class="h-10 w-10 rounded-xl grid place-items-center border border-cyan-400/30 bg-cyan-500/10">
+          <span class="text-cyan-300 font-black text-xs tracking-tighter">ASI</span>
         </div>
-        <p class="text-xs text-slate-400 mt-0.5">External passive recon + internal Nmap XML blind-spot mapping (CBI AGH)</p>
+        <div>
+          <h1 class="text-lg font-black tracking-wide text-white leading-tight">ASI MINI</h1>
+          <p class="text-[11px] text-slate-400">Attack Surface Intelligence · HackNation 2026 · CBI AGH</p>
+        </div>
       </div>
-
-      <div class="flex flex-wrap items-center gap-2">
-        <input id="domainInput" type="text" value="example.com" placeholder="Enter domain (e.g. agh.edu.pl)"
-          class="bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white w-48 focus:outline-none focus:border-cyan-400" />
-        <button onclick="runScan(false)"
-          class="bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-semibold text-sm px-3.5 py-2 rounded-lg transition">
-          Live Scan
-        </button>
-        <button onclick="runScan(true)"
-          class="bg-slate-800 hover:bg-slate-700 text-slate-100 border border-slate-700 text-sm px-3 py-2 rounded-lg transition">
-          Demo External
-        </button>
-        <button onclick="loadSampleNmap()"
-          class="bg-indigo-600/90 hover:bg-indigo-500 text-white text-sm px-3 py-2 rounded-lg transition">
-          Sample Internal Net
-        </button>
-        <label class="cursor-pointer bg-slate-800 hover:bg-slate-700 text-slate-100 border border-slate-700 text-sm px-3 py-2 rounded-lg transition">
-          Upload Nmap XML
-          <input id="nmapFile" type="file" accept=".xml" class="hidden" onchange="uploadNmap(event)" />
-        </label>
-        <button onclick="exportJson()"
-          class="bg-slate-900 hover:bg-slate-800 text-cyan-300 border border-cyan-500/40 text-sm px-3 py-2 rounded-lg transition">
-          Export JSON
-        </button>
+      <div class="flex items-center gap-2 flex-wrap">
+        <span id="encBadge" class="badge" style="background:#052e16;color:#86efac;border-color:#166534">🔒 Fernet AES · Encryption At Rest</span>
+        <span id="authState" class="badge" style="background:#0f172a;color:#94a3b8;border-color:#334155">Niezalogowany</span>
+        <button id="authBtn" class="btn btn-primary" onclick="toggleAuth()">Zaloguj</button>
       </div>
     </header>
 
-    <!-- Status Banner -->
-    <div id="statusBar" class="hidden text-sm px-4 py-2.5 rounded-lg bg-cyan-950/60 border border-cyan-700/50 text-cyan-200"></div>
+    <!-- Navigation tabs -->
+    <nav class="flex flex-wrap gap-1.5">
+      <button class="tab-btn active" data-tab="dashboard" onclick="switchTab('dashboard')">📊 Dashboard &amp; Graph</button>
+      <button class="tab-btn" data-tab="scanner" onclick="switchTab('scanner')" data-perm="read">🛰️ Scanner &gt;10k IP &amp; Import</button>
+      <button class="tab-btn" data-tab="history" onclick="switchTab('history')" data-perm="read">🕓 History, Diff &amp; Stability</button>
+      <button class="tab-btn" data-tab="admin" onclick="switchTab('admin')" data-perm="manage_users">🛡️ Signatures &amp; RBAC</button>
+    </nav>
 
-    <!-- KPI Strip -->
-    <section class="grid grid-cols-2 md:grid-cols-6 gap-3">
-      <div class="bg-slate-900/80 border border-slate-800 rounded-xl p-3.5">
-        <div class="text-xs text-slate-400 uppercase">Exposure Score</div>
-        <div class="flex items-baseline gap-2 mt-1">
-          <span id="kpiScore" class="text-2xl font-bold text-white">--</span>
-          <span id="kpiGrade" class="text-xs font-bold px-2 py-0.5 rounded bg-slate-800">--</span>
+    <!-- ======================= TAB 1: DASHBOARD ======================= -->
+    <section id="tab-dashboard" class="space-y-4">
+      <div id="kpiStrip" class="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-8 gap-2.5"></div>
+
+      <div class="card px-3 py-2.5 flex flex-wrap items-center gap-2">
+        <span class="text-[11px] font-bold uppercase tracking-wider text-slate-400 mr-2">Quick actions</span>
+        <button class="btn" data-perm="add,modify" onclick="runDemo(1)">▶ Demo Run 1</button>
+        <button class="btn" data-perm="add,modify" onclick="runDemo(2)">▶ Demo Run 2</button>
+        <button class="btn" data-perm="read" onclick="exportScan('json')">⬇ Export JSON</button>
+        <button class="btn" data-perm="read" onclick="exportScan('csv')">⬇ Export CSV</button>
+        <button class="btn" data-perm="read" onclick="exportScan('defectdojo')">⬇ DefectDojo JSON</button>
+        <button class="btn" data-perm="modify" onclick="openDojoModal()">🚀 Push to DefectDojo</button>
+        <span id="scanMeta" class="text-[11px] text-slate-500 ml-auto whitespace-nowrap"></span>
+      </div>
+
+      <div class="grid xl:grid-cols-3 gap-4">
+        <div class="card xl:col-span-2 overflow-hidden">
+          <div class="card-h">
+            <h2 class="text-sm font-bold text-white">Interactive Attack-Path Graph</h2>
+            <div class="flex gap-1.5">
+              <button class="btn btn-ghost" onclick="resetGraphFilter()">Reset filter</button>
+              <button class="btn btn-ghost" onclick="fitGraph()">Fit view</button>
+            </div>
+          </div>
+          <div class="p-2">
+            <div id="cy"></div>
+            <div id="graphFilterChip" class="mt-2 min-h-[20px]"></div>
+          </div>
+        </div>
+
+        <div class="card flex flex-col overflow-hidden">
+          <div class="card-h">
+            <div class="flex gap-1">
+              <button id="panelFindingsBtn" class="tab-btn active" onclick="setPanel('findings')">Prioritized Findings</button>
+              <button id="panelChainsBtn" class="tab-btn" onclick="setPanel('chains')">Attack Chains</button>
+            </div>
+            <span id="panelCount" class="text-[11px] text-slate-500"></span>
+          </div>
+          <div id="findingsPanel" class="card-b space-y-2 overflow-y-auto scroll-thin" style="max-height:560px"></div>
+          <div id="chainsPanel" class="card-b space-y-2 overflow-y-auto scroll-thin hidden" style="max-height:560px"></div>
         </div>
       </div>
-      <div class="bg-slate-900/80 border border-slate-800 rounded-xl p-3.5">
-        <div class="text-xs text-slate-400 uppercase">Assets Found</div>
-        <div id="kpiAssets" class="text-2xl font-bold text-cyan-300 mt-1">--</div>
-      </div>
-      <div class="bg-slate-900/80 border border-red-900/50 rounded-xl p-3.5">
-        <div class="text-xs text-red-400 uppercase">Critical</div>
-        <div id="kpiCrit" class="text-2xl font-bold text-red-400 mt-1">--</div>
-      </div>
-      <div class="bg-slate-900/80 border border-orange-900/50 rounded-xl p-3.5">
-        <div class="text-xs text-orange-400 uppercase">High</div>
-        <div id="kpiHigh" class="text-2xl font-bold text-orange-400 mt-1">--</div>
-      </div>
-      <div class="bg-slate-900/80 border border-amber-900/50 rounded-xl p-3.5">
-        <div class="text-xs text-amber-300 uppercase">Medium</div>
-        <div id="kpiMed" class="text-2xl font-bold text-amber-300 mt-1">--</div>
-      </div>
-      <div class="bg-slate-900/80 border border-slate-800 rounded-xl p-3.5">
-        <div class="text-xs text-slate-400 uppercase">Low</div>
-        <div id="kpiLow" class="text-2xl font-bold text-slate-300 mt-1">--</div>
+
+      <div class="card overflow-hidden">
+        <div class="card-h">
+          <h2 class="text-sm font-bold text-white">Asset Inventory</h2>
+          <span id="assetCount" class="text-[11px] text-slate-500"></span>
+        </div>
+        <div class="overflow-auto scroll-thin" style="max-height:440px">
+          <table class="w-full">
+            <thead>
+              <tr>
+                <th>Host</th><th>IPs / CNAME</th><th>Exposed Ports / Services</th>
+                <th>HTTP Fingerprint</th><th>Stability</th><th>Risk</th><th></th>
+              </tr>
+            </thead>
+            <tbody id="assetRows"></tbody>
+          </table>
+        </div>
       </div>
     </section>
 
-    <!-- Main Grid: Graph + Findings -->
-    <section class="grid grid-cols-1 lg:grid-cols-12 gap-5">
-      <div class="lg:col-span-7 bg-slate-900/80 border border-slate-800 rounded-xl overflow-hidden flex flex-col">
-        <div class="flex items-center justify-between px-4 py-3 border-b border-slate-800">
+    <!-- ======================= TAB 2: SCANNER & IMPORT ======================= -->
+    <section id="tab-scanner" class="hidden grid xl:grid-cols-2 gap-4" data-perm="read">
+      <div class="card overflow-hidden">
+        <div class="card-h"><h2 class="text-sm font-bold text-white">Target &amp; Window Planner</h2><span class="badge" style="background:#0c4a6e;color:#bae6fd;border-color:#0369a1">lazy CIDR arithmetic</span></div>
+        <div class="card-b space-y-3">
           <div>
-            <h2 class="text-sm font-semibold text-white">Attack-Path &amp; Exposure Graph</h2>
-            <p class="text-xs text-slate-400">Click any asset or finding node to filter blind spots</p>
+            <label class="label" for="targetsInput">Targets — IPs, CIDRs or domains (comma/newline separated)</label>
+            <textarea id="targetsInput" class="input font-mono" rows="4" placeholder="10.0.0.0/18&#10;149.156.10.10&#10;example.com">10.0.0.0/18</textarea>
+            <div class="flex flex-wrap gap-1.5 mt-1.5">
+              <button class="btn btn-ghost" onclick="fillCidr()">10.0.0.0/18 → 16 382 hosts</button>
+              <button class="btn btn-ghost" onclick="fillDemoTargets()">Demo domains</button>
+            </div>
           </div>
-          <div class="flex items-center gap-2 text-xs">
-            <button onclick="resetFilter()" class="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200">Reset Filter</button>
-            <button onclick="cy && cy.fit(null, 24)" class="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200">Fit View</button>
+          <div class="grid grid-cols-2 md:grid-cols-4 gap-2">
+            <div><label class="label" for="rateInput">Rate limit (rps)</label><input id="rateInput" class="input" type="number" min="0.1" step="0.1" value="5"></div>
+            <div><label class="label" for="windowInput">Window (min)</label><input id="windowInput" class="input" type="number" min="1" value="60"></div>
+            <div><label class="label" for="batchInput">Batch limit</label><input id="batchInput" class="input" type="number" min="1" placeholder="256"></div>
+            <div><label class="label" for="cursorInput">Cursor</label><input id="cursorInput" class="input" type="number" min="0" value="0"></div>
           </div>
-        </div>
-        <div id="cy"></div>
-        <div class="px-4 py-2 border-t border-slate-800 flex flex-wrap gap-4 text-xs text-slate-400">
-          <span><b class="text-red-400">●</b> Critical</span>
-          <span><b class="text-orange-400">●</b> High</span>
-          <span><b class="text-amber-300">●</b> Medium</span>
-          <span><b class="text-emerald-400">●</b> Low / Clean</span>
-          <span class="ml-auto" id="scanMeta">Mode: --</span>
+          <div class="grid grid-cols-2 gap-2">
+            <div><label class="label" for="windowStart">Window start (ISO)</label><input id="windowStart" class="input" placeholder="2026-11-21T22:00:00Z"></div>
+            <div><label class="label" for="windowEnd">Window end (ISO)</label><input id="windowEnd" class="input" placeholder="2026-11-21T23:00:00Z"></div>
+          </div>
+          <div class="flex flex-wrap items-center gap-3">
+            <label class="flex items-center gap-1.5 text-xs text-slate-300"><input id="scanPorts" type="checkbox" class="accent-cyan-400"> Safe TCP port check</label>
+            <div class="flex-1 min-w-[180px]"><label class="label" for="allowedPorts">Allowed ports</label><input id="allowedPorts" class="input" placeholder="80,443,22"></div>
+          </div>
+          <div class="flex flex-wrap gap-2">
+            <button class="btn btn-primary" onclick="calculatePlan()">🧮 Calculate Plan &amp; Subgroups</button>
+            <button class="btn" data-perm="add,modify" onclick="runLiveScan()">🛰️ Run Discovery Scan</button>
+          </div>
+          <div id="planResult" class="mt-2"></div>
+          <div id="scanRunResult" class="mt-2"></div>
         </div>
       </div>
 
-      <div class="lg:col-span-5 bg-slate-900/80 border border-slate-800 rounded-xl flex flex-col max-h-[560px]">
-        <div class="px-4 py-3 border-b border-slate-800 space-y-2">
-          <div class="flex items-center justify-between">
-            <h2 class="text-sm font-semibold text-white">Prioritized Blind Spots</h2>
-            <span id="filterLabel" class="text-xs text-cyan-400">All hosts</span>
+      <div class="card overflow-hidden" data-perm="add">
+        <div class="card-h"><h2 class="text-sm font-bold text-white">Unified Import</h2><span class="badge" style="background:#422006;color:#fde68a;border-color:#a16207">requires add</span></div>
+        <div class="card-b space-y-3">
+          <div>
+            <label class="label" for="importFile">Upload file — Nmap XML / CSV / JSON</label>
+            <input id="importFile" type="file" accept=".xml,.csv,.json" class="input" onchange="handleImportFile(event)">
           </div>
-          <div class="flex flex-wrap gap-1.5 text-xs">
-            <button onclick="setSevFilter('ALL')" class="px-2.5 py-1 rounded bg-cyan-500/20 text-cyan-300 border border-cyan-500/40">ALL</button>
-            <button onclick="setSevFilter('CRITICAL')" class="px-2.5 py-1 rounded bg-slate-800 text-red-400">CRITICAL</button>
-            <button onclick="setSevFilter('HIGH')" class="px-2.5 py-1 rounded bg-slate-800 text-orange-400">HIGH</button>
-            <button onclick="setSevFilter('MEDIUM')" class="px-2.5 py-1 rounded bg-slate-800 text-amber-300">MEDIUM</button>
-            <button onclick="setSevFilter('LOW')" class="px-2.5 py-1 rounded bg-slate-800 text-slate-300">LOW</button>
+          <button class="btn btn-primary" onclick="importSample()">📦 Sample Internal Nmap XML (1-click)</button>
+          <div class="border-t border-slate-800 pt-3">
+            <p class="text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-2">Manual asset form</p>
+            <div class="grid grid-cols-2 gap-2">
+              <div><label class="label" for="mHost">Host</label><input id="mHost" class="input" placeholder="app.internal"></div>
+              <div><label class="label" for="mIp">IP</label><input id="mIp" class="input" placeholder="10.20.0.50"></div>
+              <div><label class="label" for="mPorts">Open ports</label><input id="mPorts" class="input" placeholder="80,443,6379"></div>
+              <div><label class="label" for="mStatus">HTTP status</label><input id="mStatus" class="input" type="number" placeholder="200"></div>
+              <div class="col-span-2"><label class="label" for="mUrl">URL</label><input id="mUrl" class="input" placeholder="https://app.internal"></div>
+              <div><label class="label" for="mServer">Server header</label><input id="mServer" class="input" placeholder="nginx"></div>
+              <div><label class="label" for="mTitle">Page title</label><input id="mTitle" class="input" placeholder="Internal App"></div>
+            </div>
+            <button class="btn btn-primary mt-2" onclick="importManual()">➕ Import manual asset</button>
           </div>
+          <div id="importResult" class="mt-2"></div>
         </div>
-        <div id="findingsList" class="p-3 space-y-2.5 overflow-y-auto flex-1"></div>
       </div>
     </section>
 
-    <!-- Discovered Assets Table -->
-    <section class="bg-slate-900/80 border border-slate-800 rounded-xl overflow-hidden">
-      <div class="px-4 py-3 border-b border-slate-800 flex items-center justify-between">
-        <h2 class="text-sm font-semibold text-white">Discovered Infrastructure Inventory</h2>
-        <span id="dnsMeta" class="text-xs text-slate-400"></span>
+    <!-- ======================= TAB 3: HISTORY / DIFF / STABILITY ======================= -->
+    <section id="tab-history" class="hidden space-y-4" data-perm="read">
+      <div class="card overflow-hidden">
+        <div class="card-h"><h2 class="text-sm font-bold text-white">Saved Encrypted Scans</h2><button class="btn btn-ghost" onclick="loadScans()">↻ Refresh</button></div>
+        <div class="overflow-auto scroll-thin" style="max-height:280px">
+          <table class="w-full">
+            <thead><tr><th>ID</th><th>Target</th><th>Mode</th><th>Scanned at</th><th>Duration</th><th>Status</th><th>Hosts</th><th>Findings</th><th>Score</th><th>Grade</th><th>By</th><th></th></tr></thead>
+            <tbody id="scanRows"></tbody>
+          </table>
+        </div>
       </div>
-      <div class="overflow-x-auto">
-        <table class="w-full text-left text-xs">
-          <thead class="bg-slate-950/70 text-slate-400 uppercase">
-            <tr>
-              <th class="px-4 py-2.5">Asset / Host</th>
-              <th class="px-4 py-2.5">IPs / CNAME</th>
-              <th class="px-4 py-2.5">Exposed Services / HTTP</th>
-              <th class="px-4 py-2.5">TLS / Source</th>
-              <th class="px-4 py-2.5">Risk Score</th>
-            </tr>
-          </thead>
-          <tbody id="assetsTable" class="divide-y divide-slate-800/80"></tbody>
-        </table>
+
+      <div class="card overflow-hidden">
+        <div class="card-h"><h2 class="text-sm font-bold text-white">Compare Two Scans</h2><span class="badge" style="background:#0c4a6e;color:#bae6fd;border-color:#0369a1">scan-to-scan drift</span></div>
+        <div class="card-b space-y-3">
+          <div class="flex flex-wrap items-end gap-2">
+            <div class="min-w-[200px]"><label class="label" for="baseScan">Base scan</label><select id="baseScan" class="input"></select></div>
+            <div class="min-w-[200px]"><label class="label" for="currScan">Current scan</label><select id="currScan" class="input"></select></div>
+            <button class="btn btn-primary" onclick="compareScans()">⇄ Compare</button>
+          </div>
+          <div id="diffResult" class="mt-2"></div>
+        </div>
+      </div>
+
+      <div class="card overflow-hidden">
+        <div class="card-h"><h2 class="text-sm font-bold text-white">Host Stability &amp; Time-of-Day</h2><span id="hostCount" class="text-[11px] text-slate-500"></span></div>
+        <div class="overflow-auto scroll-thin" style="max-height:340px">
+          <table class="w-full">
+            <thead><tr><th>Host</th><th>Stability</th><th>Confidence</th><th>Seen / Scans</th><th>Missed streak</th><th>First seen</th><th>Last seen</th><th>Time slots</th></tr></thead>
+            <tbody id="hostRows"></tbody>
+          </table>
+        </div>
       </div>
     </section>
 
+    <!-- ======================= TAB 4: SIGNATURES & RBAC ======================= -->
+    <section id="tab-admin" class="hidden grid xl:grid-cols-2 gap-4" data-perm="manage_users">
+      <div class="card overflow-hidden">
+        <div class="card-h"><h2 class="text-sm font-bold text-white">Safe Custom Signatures</h2><span class="badge" style="background:#052e16;color:#86efac;border-color:#166534">read-only GET only</span></div>
+        <div class="card-b space-y-3">
+          <div class="overflow-auto scroll-thin" style="max-height:300px">
+            <table class="w-full">
+              <thead><tr><th>Name</th><th>Type</th><th>Match</th><th>Severity</th><th></th></tr></thead>
+              <tbody id="sigRows"></tbody>
+            </table>
+          </div>
+          <form class="border-t border-slate-800 pt-3 space-y-2" data-perm="add" onsubmit="addSignature(event)">
+            <p class="text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-2">Add signature (read-only GET only — never sends credentials/POSTs)</p>
+            <div class="grid grid-cols-2 gap-2">
+              <div><label class="label" for="sigName">Name</label><input id="sigName" class="input" required placeholder="Custom CMS marker"></div>
+              <div><label class="label" for="sigCategory">Category</label><input id="sigCategory" class="input" value="CMS / Web Platform"></div>
+              <div><label class="label" for="sigType">Match type</label>
+                <select id="sigType" class="input"><option value="html">html</option><option value="header">header</option><option value="cookie">cookie</option><option value="path">path</option><option value="favicon_hash">favicon_hash</option><option value="hostname">hostname</option><option value="title">title</option></select>
+              </div>
+              <div><label class="label" for="sigSeverity">Severity</label><select id="sigSeverity" class="input"><option>LOW</option><option selected>MEDIUM</option><option>HIGH</option><option>CRITICAL</option></select></div>
+              <div><label class="label" for="sigKey">Header key / path</label><input id="sigKey" class="input" placeholder="server or /admin"></div>
+              <div><label class="label" for="sigValue">Match regex / value</label><input id="sigValue" class="input" placeholder="nginx|wordpress|status_lt_400"></div>
+              <div class="col-span-2"><label class="label" for="sigDesc">Description</label><input id="sigDesc" class="input" placeholder="What this exposure means"></div>
+              <div class="col-span-2"><label class="label" for="sigFix">Remediation</label><input id="sigFix" class="input" placeholder="How to fix it"></div>
+            </div>
+            <button class="btn btn-primary" type="submit">➕ Add signature</button>
+          </form>
+        </div>
+      </div>
+
+      <div class="card overflow-hidden">
+        <div class="card-h"><h2 class="text-sm font-bold text-white">RBAC Users &amp; Roles</h2><span class="badge" style="background:#450a0a;color:#fecaca;border-color:#991b1b">manage_users</span></div>
+        <div class="card-b space-y-3">
+          <div class="overflow-auto scroll-thin" style="max-height:250px">
+            <table class="w-full">
+              <thead><tr><th>User</th><th>Role</th><th>Label</th><th>Permissions</th></tr></thead>
+              <tbody id="userRows"></tbody>
+            </table>
+          </div>
+          <div class="border-t border-slate-800 pt-3">
+            <p class="text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-2">Create user</p>
+            <div class="grid grid-cols-2 gap-2">
+              <div><label class="label" for="newUsername">Username</label><input id="newUsername" class="input" placeholder="soc_viewer"></div>
+              <div><label class="label" for="newPassword">Password</label><input id="newPassword" class="input" type="password" placeholder="min 4 chars"></div>
+              <div class="col-span-2"><label class="label" for="newRole">Role</label><select id="newRole" class="input"></select></div>
+            </div>
+            <button class="btn btn-primary mt-2" onclick="createUser()">➕ Create user</button>
+          </div>
+          <div class="border-t border-slate-800 pt-3">
+            <p class="text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-2">Create custom role</p>
+            <div class="grid grid-cols-2 gap-2">
+              <div><label class="label" for="roleKey">Role key</label><input id="roleKey" class="input" placeholder="custom_audit"></div>
+              <div><label class="label" for="roleLabel">Label</label><input id="roleLabel" class="input" placeholder="Custom Audit"></div>
+            </div>
+            <div class="flex flex-wrap gap-3 mt-2" id="rolePermBoxes">
+              <label class="text-xs text-slate-300 flex items-center gap-1"><input type="checkbox" class="accent-cyan-400" value="read"> read</label>
+              <label class="text-xs text-slate-300 flex items-center gap-1"><input type="checkbox" class="accent-cyan-400" value="modify"> modify</label>
+              <label class="text-xs text-slate-300 flex items-center gap-1"><input type="checkbox" class="accent-cyan-400" value="add"> add</label>
+              <label class="text-xs text-slate-300 flex items-center gap-1"><input type="checkbox" class="accent-cyan-400" value="delete"> delete</label>
+              <label class="text-xs text-slate-300 flex items-center gap-1"><input type="checkbox" class="accent-cyan-400" value="manage_users"> manage_users</label>
+              <label class="text-xs text-slate-300 flex items-center gap-1"><input type="checkbox" class="accent-cyan-400" value="manage_config"> manage_config</label>
+            </div>
+            <button class="btn btn-primary mt-2" onclick="createRole()">➕ Create role</button>
+          </div>
+          <div id="adminResult" class="text-xs text-slate-400"></div>
+        </div>
+      </div>
+    </section>
   </div>
 
-  <script>
-    let currentData = null;
-    let cy = null;
-    let sevFilter = "ALL";
-    let hostFilter = null;
-
-    const SEV_COLOR = { CRITICAL: "#ef4444", HIGH: "#f97316", MEDIUM: "#fbbf24", LOW: "#10b981" };
-    const SEV_BADGE = {
-      CRITICAL: "bg-red-500/20 text-red-300 border-red-500/40",
-      HIGH: "bg-orange-500/20 text-orange-300 border-orange-500/40",
-      MEDIUM: "bg-amber-500/20 text-amber-200 border-amber-500/40",
-      LOW: "bg-emerald-500/20 text-emerald-300 border-emerald-500/40",
-    };
-
-    const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-
-    function setStatus(msg) {
-      const el = document.getElementById("statusBar");
-      if (!msg) { el.classList.add("hidden"); return; }
-      el.textContent = msg;
-      el.classList.remove("hidden");
-    }
-
-    async function runScan(isDemo) {
-      const domain = isDemo ? "agh-infra.demo" : (document.getElementById("domainInput").value.trim() || "example.com");
-      setStatus(isDemo ? "Loading external demo dataset..." : `Running passive recon on ${domain} (crt.sh + DNS + TLS + HTTP)...`);
-      try {
-        const res = await fetch(`/api/scan?domain=${encodeURIComponent(domain)}&demo=${isDemo}`);
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        currentData = await res.json();
-        hostFilter = null; sevFilter = "ALL";
-        renderAll(); setStatus(null);
-      } catch (err) {
-        setStatus(`Scan failed: ${err.message}.`);
-      }
-    }
-
-    async function loadSampleNmap() {
-      setStatus("Analyzing sample internal network (Nmap XML)...");
-      try {
-        const res = await fetch("/api/import", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ filename: "agh-internal-lab.xml", sample: true }),
-        });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        currentData = await res.json();
-        hostFilter = null; sevFilter = "ALL";
-        renderAll(); setStatus(null);
-      } catch (err) {
-        setStatus(`Import failed: ${err.message}`);
-      }
-    }
-
-    async function uploadNmap(evt) {
-      const file = evt.target.files[0];
-      if (!file) return;
-      setStatus(`Parsing ${file.name}...`);
-      try {
-        const text = await file.text();
-        const res = await fetch("/api/import", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ filename: file.name, content: text, sample: false }),
-        });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
-        currentData = data;
-        hostFilter = null; sevFilter = "ALL";
-        renderAll(); setStatus(null);
-      } catch (err) {
-        setStatus(`XML import failed: ${err.message}`);
-      } finally {
-        evt.target.value = "";
-      }
-    }
-
-    function renderAll() {
-      const s = currentData.summary;
-      document.getElementById("kpiScore").textContent = `${s.exposure_score}/100`;
-      const gradeEl = document.getElementById("kpiGrade");
-      gradeEl.textContent = `Grade ${s.grade}`;
-      gradeEl.className = `text-xs font-bold px-2 py-0.5 rounded border ${SEV_BADGE[s.risk_level]}`;
-      document.getElementById("kpiAssets").textContent = s.assets_discovered;
-      document.getElementById("kpiCrit").textContent = s.severity_counts.CRITICAL;
-      document.getElementById("kpiHigh").textContent = s.severity_counts.HIGH;
-      document.getElementById("kpiMed").textContent = s.severity_counts.MEDIUM;
-      document.getElementById("kpiLow").textContent = s.severity_counts.LOW;
-      document.getElementById("scanMeta").textContent = `Target: ${currentData.target} | Mode: ${currentData.mode.toUpperCase()}`;
-      const d = currentData.dns_root;
-      document.getElementById("dnsMeta").textContent = currentData.mode === "nmap_import"
-        ? "Source: Nmap XML Network Scan"
-        : `SPF: ${d.has_spf ? "OK" : "MISSING"}  |  DMARC: ${d.has_dmarc ? "OK" : "MISSING"}`;
-
-      renderGraph();
-      renderFindings();
-      renderAssets();
-    }
-
-    function renderGraph() {
-      if (cy) cy.destroy();
-      cy = cytoscape({
-        container: document.getElementById("cy"),
-        elements: [...currentData.graph.nodes, ...currentData.graph.edges],
-        style: [
-          {
-            selector: "node",
-            style: {
-              "label": "data(label)",
-              "color": "#e2e8f0",
-              "font-size": "10px",
-              "text-valign": "bottom",
-              "text-margin-y": "6px",
-              "text-wrap": "wrap",
-              "text-max-width": "125px",
-              "background-color": (ele) => SEV_COLOR[ele.data("severity")] || "#38bdf8",
-              "border-width": 2,
-              "border-color": "#0f172a",
-              "width": (ele) => ele.data("type") === "root" ? 42 : ele.data("type") === "host" ? 30 : 20,
-              "height": (ele) => ele.data("type") === "root" ? 42 : ele.data("type") === "host" ? 30 : 20,
-              "shape": (ele) => ele.data("type") === "finding" ? "diamond" : ele.data("type") === "external" ? "triangle" : "ellipse",
-            },
-          },
-          {
-            selector: "edge",
-            style: {
-              "width": 1.5,
-              "line-color": "#334155",
-              "target-arrow-color": "#475569",
-              "target-arrow-shape": "triangle",
-              "curve-style": "bezier",
-              "label": "data(label)",
-              "font-size": "8px",
-              "color": "#64748b",
-              "text-rotation": "autorotate",
-            },
-          },
-        ],
-        layout: { name: "cose", animate: false, padding: 28, nodeRepulsion: 9000 },
-      });
-
-      cy.on("tap", "node", (evt) => {
-        const d = evt.target.data();
-        if (d.type === "host" || d.type === "root") {
-          hostFilter = d.label;
-          renderFindings();
-        } else if (d.type === "finding") {
-          const f = currentData.findings.find((x) => x.id === d.finding_id);
-          if (f) { hostFilter = f.host; renderFindings(); }
-        }
-      });
-    }
-
-    function setSevFilter(sev) { sevFilter = sev; renderFindings(); }
-    function resetFilter() { hostFilter = null; sevFilter = "ALL"; renderFindings(); }
-
-    function renderFindings() {
-      document.getElementById("filterLabel").textContent = hostFilter ? `Host: ${hostFilter}` : `All hosts (${sevFilter})`;
-      const list = document.getElementById("findingsList");
-      const items = currentData.findings.filter((f) =>
-        (sevFilter === "ALL" || f.severity === sevFilter) &&
-        (!hostFilter || f.host === hostFilter)
-      );
-
-      if (!items.length) {
-        list.innerHTML = `<div class="text-xs text-slate-400 p-4 text-center">No blind spots match this filter.</div>`;
-        return;
-      }
-
-      list.innerHTML = items.map((f) => `
-        <div class="bg-slate-950/80 border border-slate-800 rounded-lg p-3 space-y-1.5 hover:border-slate-700">
-          <div class="flex items-center justify-between gap-2">
-            <span class="text-[11px] font-bold px-2 py-0.5 rounded border ${SEV_BADGE[f.severity]}">${esc(f.severity)}</span>
-            <span class="text-[11px] text-slate-400 font-mono">${esc(f.id)} · ${esc(f.host)}</span>
-          </div>
-          <div class="text-sm font-semibold text-white">${esc(f.title)}</div>
-          <div class="text-xs text-slate-300"><span class="text-slate-500">Evidence:</span> ${esc(f.evidence)}</div>
-          <div class="text-xs text-amber-200/90"><span class="text-slate-500">Vector:</span> ${esc(f.attack_vector)}</div>
-          <div class="text-xs text-emerald-300/95 bg-emerald-950/30 border border-emerald-900/40 rounded px-2 py-1.5">
-            <span class="font-semibold">Fix:</span> ${esc(f.remediation)}
+  <!-- Login modal -->
+  <div id="loginModal" class="modal">
+    <div class="modal-box">
+      <div class="px-5 py-4 border-b border-slate-800 flex items-center justify-between">
+        <div>
+          <h2 class="text-base font-bold text-white">Zaloguj do ASI Mini</h2>
+          <p class="text-[11px] text-slate-400">RBAC jest egzekwowany przez nagłówek <code class="text-cyan-300">X-Auth-Token</code>. Brak ukrytych kont i brak hardcodowanego admin.</p>
+        </div>
+        <button class="btn btn-ghost" onclick="closeModal('loginModal')">✕</button>
+      </div>
+      <form class="p-5 space-y-3" onsubmit="submitLogin(event)">
+        <div><label class="label" for="loginUser">Username</label><input id="loginUser" class="input" autocomplete="username" required></div>
+        <div><label class="label" for="loginPass">Password</label><input id="loginPass" class="input" type="password" autocomplete="current-password" required></div>
+        <p id="loginError" class="text-xs text-rose-300 hidden"></p>
+        <button class="btn btn-primary w-full justify-center" type="submit">🔓 Login</button>
+        <div>
+          <p class="text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">Demo credentials — 1 click to test all 4 roles</p>
+          <div class="grid grid-cols-2 gap-1.5">
+            <button type="button" class="btn justify-start" onclick="fillLogin('admin','admin123')">👑 admin / admin123</button>
+            <button type="button" class="btn justify-start" onclick="fillLogin('analyst','analyst123')">✏️ analyst / analyst123</button>
+            <button type="button" class="btn justify-start" onclick="fillLogin('operator','operator123')">🔧 operator / operator123</button>
+            <button type="button" class="btn justify-start" onclick="fillLogin('auditor','auditor123')">👁️ auditor / auditor123</button>
           </div>
         </div>
-      `).join("");
+      </form>
+    </div>
+  </div>
+
+  <!-- Override modal -->
+  <div id="overrideModal" class="modal hidden">
+    <div class="modal-box">
+      <div class="px-5 py-4 border-b border-slate-800 flex items-center justify-between">
+        <div>
+          <h2 id="overrideTitle" class="text-base font-bold text-white">Edit persistent override</h2>
+          <p class="text-[11px] text-slate-400">Manual edits survive every future re-scan.</p>
+        </div>
+        <button class="btn btn-ghost" onclick="closeModal('overrideModal')">✕</button>
+      </div>
+      <form class="p-5 space-y-3" onsubmit="saveOverride(event)">
+        <input id="ovKey" type="hidden"><input id="ovType" type="hidden"><input id="ovScanId" type="hidden">
+        <div><label class="label" for="ovNotes">Analyst notes</label><textarea id="ovNotes" class="input" rows="3" placeholder="Owner, compensating controls, ticket ID..."></textarea></div>
+        <div><label class="label" for="ovTags">Tags (comma separated)</label><input id="ovTags" class="input" placeholder="critical-asset, campus, triaged"></div>
+        <div class="grid grid-cols-2 gap-2">
+          <div><label class="label" for="ovSeverity">Custom severity</label><select id="ovSeverity" class="input"><option value="">— keep detected —</option><option>CRITICAL</option><option>HIGH</option><option>MEDIUM</option><option>LOW</option><option>INFO</option></select></div>
+          <div><label class="label" for="ovStatus">Status override</label><select id="ovStatus" class="input"><option value="">— open —</option><option value="in_review">in_review</option><option value="accepted_risk">accepted_risk</option><option value="false_positive">false_positive</option><option value="resolved">resolved</option></select></div>
+        </div>
+        <div class="flex justify-end gap-2 pt-1">
+          <button type="button" class="btn btn-ghost" onclick="closeModal('overrideModal')">Anuluj</button>
+          <button class="btn btn-primary" type="submit">💾 Save persistent override</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- DefectDojo push modal -->
+  <div id="dojoModal" class="modal hidden">
+    <div class="modal-box">
+      <div class="px-5 py-4 border-b border-slate-800 flex items-center justify-between">
+        <div>
+          <h2 class="text-base font-bold text-white">Push to DefectDojo</h2>
+          <p class="text-[11px] text-slate-400">Generic Findings Import · scan <span id="dojoScanId"></span></p>
+        </div>
+        <button class="btn btn-ghost" onclick="closeModal('dojoModal')">✕</button>
+      </div>
+      <form class="p-5 space-y-3" onsubmit="pushDojo(event)">
+        <div><label class="label" for="dojoUrl">DefectDojo URL</label><input id="dojoUrl" class="input" placeholder="https://defectdojo.example.com" required></div>
+        <div><label class="label" for="dojoToken">API token</label><input id="dojoToken" class="input" type="password" placeholder="Token ..." required></div>
+        <div><label class="label" for="dojoEngagement">Engagement ID</label><input id="dojoEngagement" class="input" type="number" min="1" required></div>
+        <p id="dojoError" class="text-xs text-rose-300 hidden"></p>
+        <div class="flex justify-end gap-2"><button type="button" class="btn btn-ghost" onclick="closeModal('dojoModal')">Anuluj</button><button class="btn btn-primary" type="submit">🚀 Push findings</button></div>
+      </form>
+    </div>
+  </div>
+
+  <div id="toasts" class="fixed bottom-4 right-4 z-[80] space-y-2 pointer-events-none"></div>
+
+  <script>
+    "use strict";
+
+    const ROLE_LABELS = {
+      admin: "Administracja",
+      add_delete_modify: "Dodawanie, usuwanie, modyfikacja",
+      modify_read: "Modyfikacja i odczyt",
+      read: "Odczyt",
+    };
+
+    const SEVERITY_COLOR = {
+      CRITICAL: "#f87171", HIGH: "#fb923c", MEDIUM: "#facc15", LOW: "#4ade80", INFO: "#38bdf8",
+    };
+
+    const STATE = {
+      token: null,
+      user: null,
+      scan: null,
+      scans: [],
+      signatures: [],
+      roles: [],
+      hostHistory: [],
+      cy: null,
+      graphFilter: null,
+      panel: "findings",
+      lastScanInput: null,
+      lastNextCursor: null,
+    };
+
+    const $ = (id) => document.getElementById(id);
+    const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
+    const num = (v, d = 0) => (v === null || v === undefined || v === "" ? d : Number(v));
+    const list = (v) => Array.isArray(v) ? v : [];
+    const isPermitted = (perm) => !!STATE.user && list(STATE.user.permissions).includes(perm);
+    const isPermittedAny = (...perms) => perms.some((p) => isPermitted(p));
+
+    function toast(message, type = "info") {
+      const colors = {
+        ok: "border-emerald-700 bg-emerald-950/90 text-emerald-200",
+        error: "border-rose-800 bg-rose-950/90 text-rose-200",
+        info: "border-cyan-800 bg-cyan-950/90 text-cyan-100",
+      };
+      const el = document.createElement("div");
+      el.className = `fade-in border rounded-lg px-3 py-2 text-xs font-semibold shadow-xl max-w-sm pointer-events-auto ${colors[type] || colors.info}`;
+      el.textContent = message;
+      $("toasts").appendChild(el);
+      setTimeout(() => el.remove(), 4200);
     }
 
-    function renderAssets() {
-      const tbody = document.getElementById("assetsTable");
-      tbody.innerHTML = currentData.subdomains.map((sub) => {
-        const sc = currentData.host_scores[sub.host] ?? 0;
-        const sev = sc >= 60 ? "CRITICAL" : sc >= 35 ? "HIGH" : sc >= 15 ? "MEDIUM" : "LOW";
-        const net = sub.ips.length ? sub.ips.join(", ") : (sub.cnames.length ? `CNAME -> ${sub.cnames.join(", ")}` : "Unresolved");
-        const ports = sub.open_ports || [];
-        const svc = ports.length
-          ? ports.map((p) => `<span class="inline-block mr-1 mb-0.5 px-1.5 py-0.5 rounded bg-slate-800 text-cyan-300 font-mono">${esc(p.port)}/${esc(p.service)}</span>`).join("")
-          : (sub.http.reachable
-            ? `<span class="text-cyan-300">HTTP ${esc(sub.http.status)}</span> ${esc(sub.http.server)} ${esc(sub.http.x_powered_by)}`
-            : `<span class="text-slate-500">Unreachable</span>`);
-        const tls = sub.tls.error === "nmap_import"
-          ? `<span class="text-indigo-300">Nmap XML</span>`
-          : sub.tls.valid === true
-          ? `<span class="${sub.tls.days_remaining <= 14 ? 'text-orange-400 font-semibold' : 'text-emerald-400'}">Valid (${sub.tls.days_remaining}d)</span>`
-          : sub.tls.valid === false
-          ? `<span class="text-red-400 font-semibold">INVALID (${esc(sub.tls.error)})</span>`
-          : `<span class="text-slate-500">No TLS</span>`;
-        return `
-          <tr class="hover:bg-slate-800/40 cursor-pointer" onclick="hostFilter='${esc(sub.host)}'; renderFindings();">
-            <td class="px-4 py-2.5 font-mono text-white">${esc(sub.host)}</td>
-            <td class="px-4 py-2.5 font-mono text-slate-300">${esc(net)}</td>
-            <td class="px-4 py-2.5 text-slate-300">${svc}</td>
-            <td class="px-4 py-2.5">${tls}</td>
-            <td class="px-4 py-2.5"><span class="px-2 py-0.5 rounded border font-semibold ${SEV_BADGE[sev]}">${sc}</span></td>
-          </tr>
-        `;
+    function openModal(id) { $(id).classList.remove("hidden"); }
+    function closeModal(id) { $(id).classList.add("hidden"); }
+
+    function applyPermissions() {
+      // Tab visibility
+      document.querySelectorAll(".tab-btn[data-tab]").forEach((btn) => {
+        const perm = btn.dataset.perm;
+        btn.classList.toggle("hidden", !!(perm && !isPermitted(perm)));
+      });
+      // Section visibility
+      document.querySelectorAll("section[data-perm]").forEach((sec) => {
+        sec.classList.toggle("hidden", !isPermitted(sec.dataset.perm));
+      });
+      // Button/action visibility
+      document.querySelectorAll("[data-perm]").forEach((el) => {
+        const perms = String(el.dataset.perm || "").split(",").map((p) => p.trim()).filter(Boolean);
+        const allowed = perms.some((p) => isPermitted(p));
+        el.classList.toggle("hidden", !allowed);
+      });
+    }
+
+    function renderAuth() {
+      const state = $("authState");
+      const btn = $("authBtn");
+      if (STATE.user) {
+        state.className = "badge";
+        state.style.cssText = "background:#0c4a6e;color:#bae6fd;border-color:#0369a1";
+        state.textContent = `${esc(STATE.user.username)} · ${esc(ROLE_LABELS[STATE.user.role] || STATE.user.role_label || STATE.user.role)}`;
+        btn.textContent = "Wyloguj / Zmień rolę";
+        btn.className = "btn btn-danger";
+      } else {
+        state.className = "badge";
+        state.style.cssText = "background:#0f172a;color:#94a3b8;border-color:#334155";
+        state.textContent = "Niezalogowany";
+        btn.textContent = "Zaloguj";
+        btn.className = "btn btn-primary";
+      }
+      applyPermissions();
+    }
+
+    function toggleAuth() {
+      if (STATE.user) logout(true);
+      else openModal("loginModal");
+    }
+
+    function fillLogin(username, password) {
+      $("loginUser").value = username;
+      $("loginPass").value = password;
+    }
+
+    async function submitLogin(event) {
+      event.preventDefault();
+      const err = $("loginError");
+      err.classList.add("hidden");
+      err.textContent = "";
+      try {
+        const res = await fetch("/api/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ username: $("loginUser").value.trim(), password: $("loginPass").value }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || "Nieprawidłowe dane logowania.");
+        STATE.token = data.token;
+        STATE.user = data.user || data;
+        closeModal("loginModal");
+        renderAuth();
+        toast(`Zalogowano jako ${STATE.user.username} (${esc(ROLE_LABELS[STATE.user.role] || STATE.user.role)})`, "ok");
+        await bootstrapData();
+      } catch (e) {
+        err.textContent = e.message;
+        err.classList.remove("hidden");
+      }
+    }
+
+    function logout(showModal = true) {
+      fetch("/api/logout", { method: "POST", headers: authHeaders() }).catch(() => {});
+      STATE.token = null;
+      STATE.user = null;
+      renderAuth();
+      if (showModal) {
+        toast("Wylogowano.", "info");
+        openModal("loginModal");
+      }
+    }
+
+    function authHeaders(extra = {}) {
+      const h = { ...extra };
+      if (STATE.token) h["X-Auth-Token"] = STATE.token;
+      return h;
+    }
+
+    async function api(path, options = {}) {
+      const headers = { ...authHeaders(options.headers || {}) };
+      if (options.body !== undefined) headers["Content-Type"] = "application/json";
+      const res = await fetch(path, { method: options.method || "GET", headers, body: options.body !== undefined ? JSON.stringify(options.body) : undefined });
+      if (res.status === 401) { logout(false); throw new Error("Sesja wygasła — zaloguj ponownie."); }
+      const ct = res.headers.get("content-type") || "";
+      const data = ct.includes("application/json") ? await res.json() : await res.text();
+      if (!res.ok) {
+        const detail = data && data.detail ? (typeof data.detail === "string" ? data.detail : JSON.stringify(data.detail)) : `HTTP ${res.status}`;
+        throw new Error(detail);
+      }
+      return data;
+    }
+
+    function switchTab(name) {
+      document.querySelectorAll("section[id^='tab-']").forEach((sec) => sec.classList.add("hidden"));
+      $(`tab-${name}`).classList.remove("hidden");
+      document.querySelectorAll(".tab-btn[data-tab]").forEach((b) => b.classList.toggle("active", b.dataset.tab === name));
+      if (name === "dashboard" && STATE.cy) setTimeout(() => STATE.cy.resize(), 30);
+      if (name === "history") { loadScans(); loadHostHistory(); }
+      if (name === "admin") { loadSignatures(); loadUsersAndRoles(); }
+    }
+
+    /* ------------------------------------------------------------------ */
+    /* Dashboard: graph, findings, chains, assets                         */
+    /* ------------------------------------------------------------------ */
+    function severityBadge(sev) {
+      const s = String(sev || "INFO").toUpperCase();
+      return `<span class="badge sev-${esc(s)}">${esc(s)}</span>`;
+    }
+
+    function stabilityBadge(stability, confidence) {
+      const st = String(stability || "inactive").toLowerCase();
+      const pct = confidence == null ? "" : ` ${num(confidence)}%`;
+      return `<span class="badge st-${esc(st)}">${esc(st)}${pct}</span>`;
+    }
+
+    function scoreColor(score) {
+      const s = num(score);
+      if (s >= 75) return SEVERITY_COLOR.CRITICAL;
+      if (s >= 55) return SEVERITY_COLOR.HIGH;
+      if (s >= 35) return SEVERITY_COLOR.MEDIUM;
+      return SEVERITY_COLOR.LOW;
+    }
+
+    function ensureGraph() {
+      if (STATE.cy) return STATE.cy;
+      STATE.cy = cytoscape({
+        container: $("cy"),
+        style: [
+          { selector: "node", style: { "background-color":"#1e293b","border-width":2,"border-color":"#334155",label:"data(label)",color:"#cbd5e1","font-size":9,"text-valign":"bottom","text-margin-y":5,width:26,height:26,"text-wrap":"ellipsis","text-max-width":115,"text-background-color":"#070b14","text-background-opacity":0.7,"text-background-padding":1 } },
+          { selector: 'node[type="root"]', style: { "background-color":"#0891b2","border-color":"#22d3ee",width:56,height:56,"font-size":12,"font-weight":"bold",color:"#e0f2fe" } },
+          { selector: 'node[type="host"]', style: { "background-color":"#1d4ed8","border-color":"#60a5fa",shape:"round-rectangle",width:36,height:26 } },
+          { selector: 'node[type="external"]', style: { "background-color":"#7c3aed","border-color":"#a78bfa",shape:"hexagon",width:30,height:28 } },
+          { selector: 'node[type="finding"]', style: { shape:"diamond",width:22,height:22 } },
+          { selector: 'node[severity="CRITICAL"]', style: { "background-color":"#dc2626","border-color":"#f87171" } },
+          { selector: 'node[severity="HIGH"]', style: { "background-color":"#ea580c","border-color":"#fdba74" } },
+          { selector: 'node[severity="MEDIUM"]', style: { "background-color":"#ca8a04","border-color":"#fde047" } },
+          { selector: 'node[severity="LOW"]', style: { "background-color":"#16a34a","border-color":"#86efac" } },
+          { selector: "edge", style: { width:1.4,"line-color":"#334155","target-arrow-color":"#475569","target-arrow-shape":"triangle","curve-style":"bezier",opacity:0.85 } },
+          { selector: "node:selected", style: { "border-width":4,"border-color":"#22d3ee" } },
+        ],
+        layout: { name:"cose",animate:false,padding:30,nodeRepulsion:9000,idealEdgeLength:95 },
+        wheelSensitivity:0.2, minZoom:0.2, maxZoom:2.5,
+      });
+      STATE.cy.on("tap", "node", (evt) => {
+        const d = evt.target.data();
+        if (d.type === "finding" && d.finding_id) { STATE.graphFilter = { type:"finding", value:d.finding_id, label:d.label }; }
+        else if (d.type === "host") { const host = String(d.id || "").replace(/^host:/,""); STATE.graphFilter = { type:"host", value:host, label:host }; }
+        else if (d.type === "root") { STATE.graphFilter = null; }
+        else { return; }
+        renderGraphFilterChip();
+        renderFindings();
+        setPanel("findings");
+      });
+      return STATE.cy;
+    }
+
+    function renderGraph(graph) {
+      const cy = ensureGraph();
+      cy.elements().remove();
+      const nodes = list(graph && graph.nodes);
+      const edges = list(graph && graph.edges);
+      if (!nodes.length) return;
+      cy.add(nodes.concat(edges));
+      cy.layout({ name:"cose",animate:false,padding:30,nodeRepulsion:9000,idealEdgeLength:95 }).run();
+    }
+
+    function fitGraph() { if (STATE.cy && STATE.cy.elements().length) STATE.cy.fit(undefined, 35); }
+    function resetGraphFilter() { STATE.graphFilter = null; renderGraphFilterChip(); renderFindings(); if (STATE.cy) STATE.cy.$(":selected").unselect(); }
+    function renderGraphFilterChip() {
+      const box = $("graphFilterChip");
+      if (!STATE.graphFilter) { box.innerHTML = `<span class="text-[11px] text-slate-600">Kliknij host lub finding w grafie, aby filtrować.</span>`; return; }
+      box.innerHTML = `<span class="chip">Filtr: ${esc(STATE.graphFilter.type)} = <b class="text-cyan-300">${esc(STATE.graphFilter.label || STATE.graphFilter.value)}</b></span><button class="btn btn-ghost ml-1" onclick="resetGraphFilter()">✕ clear</button>`;
+    }
+
+    function setPanel(name) {
+      STATE.panel = name;
+      $("findingsPanel").classList.toggle("hidden", name !== "findings");
+      $("chainsPanel").classList.toggle("hidden", name !== "chains");
+      $("panelFindingsBtn").classList.toggle("active", name === "findings");
+      $("panelChainsBtn").classList.toggle("active", name === "chains");
+      if (name === "findings") renderFindings();
+      if (name === "chains") renderChains();
+    }
+
+    function currentFindings() {
+      const all = list(STATE.scan && STATE.scan.findings);
+      if (!STATE.graphFilter) return all;
+      if (STATE.graphFilter.type === "host") return all.filter((f) => f.host === STATE.graphFilter.value);
+      return all.filter((f) => f.id === STATE.graphFilter.value);
+    }
+
+    function renderFindings() {
+      const findings = currentFindings();
+      const panel = $("findingsPanel");
+      if (panel) $("panelCount").textContent = STATE.panel === "findings" ? `${findings.length} findings` : $("panelCount").textContent;
+      if (!findings.length) { panel.innerHTML = `<p class="text-xs text-slate-500 py-8 text-center">Brak findings dla bieżącego filtra.</p>`; return; }
+      panel.innerHTML = findings.map((f) => {
+        const tags = list(f.tags);
+        const sigTag = f.source === "signature" ? `<span class="chip" style="border-color:#7c3aed;color:#ddd6fe">signature</span>` : "";
+        const cve = f.cve ? `<span class="chip">${esc(f.cve)}</span>` : "";
+        const mitre = f.mitre_id ? `<span class="chip">${esc(f.mitre_id)} · ${esc(f.mitre_tactic || "")}</span>` : "";
+        const notes = f.notes ? `<p class="text-[11px] text-amber-200/90 bg-amber-950/30 border border-amber-900/40 rounded px-2 py-1">📝 ${esc(f.notes)}</p>` : "";
+        const tagHtml = tags.length ? `<div class="flex flex-wrap gap-1">${tags.map((t) => `<span class="chip">${esc(t)}</span>`).join("")}</div>` : "";
+        const editBtn = isPermitted("modify") ? `<button class="btn btn-ghost" onclick="openOverride('finding','${esc(f.id)}')">✏️ Edit Override</button>` : "";
+        return `<div class="fade-in rounded-lg border border-slate-800 bg-slate-950/50 p-2.5 space-y-1.5">
+          <div class="flex items-start gap-1.5 flex-wrap">${severityBadge(f.severity)}${mitre}${cve}${sigTag}</div>
+          <p class="text-xs font-bold text-slate-100 leading-snug">${esc(f.title)}</p>
+          <p class="text-[11px] font-mono text-cyan-300">${esc(f.host)}</p>
+          <p class="text-[11px] text-slate-400 leading-snug">${esc(f.evidence)}</p>
+          <p class="text-[11px] text-emerald-300/80 leading-snug"><b>Fix:</b> ${esc(f.remediation)}</p>
+          ${notes}${tagHtml}
+          <div class="flex items-center justify-between gap-2 pt-0.5">
+            <span class="text-[10px] text-slate-600 font-mono">${esc(f.id)} · ${esc(f.category)} · ${esc(f.status || "open")}</span>
+            ${editBtn}
+          </div>
+        </div>`;
       }).join("");
     }
 
-    function exportJson() {
-      if (!currentData) return;
-      const blob = new Blob([JSON.stringify(currentData, null, 2)], { type: "application/json" });
-      const a = document.createElement("a");
-      a.href = URL.createObjectURL(blob);
-      a.download = `asi-report-${currentData.target}.json`;
-      a.click();
+    function renderChains() {
+      const chains = list(STATE.scan && STATE.scan.attack_chains);
+      const panel = $("chainsPanel");
+      if (panel) $("panelCount").textContent = `${chains.length} chains`;
+      if (!chains.length) { panel.innerHTML = `<p class="text-xs text-slate-500 py-8 text-center">Brak wykrytych łańcuchów ataku.</p>`; return; }
+      panel.innerHTML = chains.map((c) => `
+        <div class="fade-in rounded-lg border border-slate-800 bg-slate-950/50 p-2.5 space-y-1.5">
+          <div class="flex items-center gap-1.5 flex-wrap">${severityBadge(c.severity)}<span class="chip">${esc(c.id)}</span></div>
+          <p class="text-xs font-bold text-slate-100">${esc(c.name)}</p>
+          <p class="text-[11px] text-slate-400">${esc(c.description)}</p>
+          <div class="flex flex-wrap gap-1">${list(c.hosts).map((h) => `<span class="chip" style="color:#67e8f9">${esc(h)}</span>`).join("")}</div>
+          <ol class="list-decimal list-inside text-[11px] text-slate-300 space-y-0.5">${list(c.steps).map((s) => `<li>${esc(s)}</li>`).join("")}</ol>
+          <div class="flex flex-wrap gap-1">${list(c.mitre_ids).map((m) => `<span class="chip">${esc(m)}</span>`).join("")}</div>
+        </div>`).join("");
     }
 
-    window.addEventListener("DOMContentLoaded", () => runScan(true));
+    function renderAssets() {
+      const assets = list(STATE.scan && STATE.scan.subdomains);
+      $("assetCount").textContent = `${assets.length} assets`;
+      if (!assets.length) { $("assetRows").innerHTML = `<tr><td colspan="7" class="text-center text-slate-500 py-6">Brak assetów. Uruchom demo lub import.</td></tr>`; return; }
+      $("assetRows").innerHTML = assets.map((a) => {
+        const http = a.http || {};
+        const ips = list(a.ips);
+        const cnames = list(a.cnames);
+        const ports = list(a.open_ports).map((p) => `${p.port}/${p.service || "?"}`).join(", ") || "—";
+        const tech = list(http.technologies).join(", ") || "—";
+        const cookies = list(http.cookies).join(", ") || "—";
+        const idn = [...ips, ...cnames].join(" · ") || "—";
+        const score = num(a.host_score);
+        const fp = [
+          http.title ? `<div class="text-slate-200 font-semibold">${esc(http.title)}</div>` : "",
+          `<div class="text-slate-400">HTTP ${esc(http.status ?? "—")} · ${esc(http.server || "—")}${http.x_powered_by ? " · " + esc(http.x_powered_by) : ""}</div>`,
+          `<div class="text-slate-500">Cookies: ${esc(cookies)}</div>`,
+          `<div class="text-slate-500">Tech: ${esc(tech)}</div>`,
+          `<div class="text-slate-600 font-mono text-[10px]">favicon: ${esc(http.favicon_hash || "—")}</div>`,
+        ].join("");
+        const edit = isPermitted("modify") ? `<button class="btn btn-ghost" onclick="openOverride('host','${esc(a.host)}')">✏️ Edit Asset</button>` : `<span class="text-[10px] text-slate-600">read-only</span>`;
+        return `<tr>
+          <td><div class="font-mono text-cyan-300">${esc(a.host)}</div><div class="text-[10px] text-slate-500">${esc(a.severity || "")} · ${num(a.finding_count)} findings</div></td>
+          <td class="text-slate-400">${esc(idn)}</td>
+          <td class="text-slate-300">${esc(ports)}</td>
+          <td class="min-w-[250px] space-y-0.5">${fp}</td>
+          <td>${stabilityBadge(a.stability, a.confidence_pct)}<div class="text-[10px] text-slate-500 mt-0.5">${num(a.seen_count)}/${num(a.scan_count)} · missed ${num(a.missed_streak)}</div></td>
+          <td><span class="text-sm font-black" style="color:${scoreColor(score)}">${score}</span></td>
+          <td class="text-right">${edit}</td>
+        </tr>`;
+      }).join("");
+    }
+
+    function renderScan(scan) {
+      STATE.scan = scan || {};
+      STATE.graphFilter = null;
+      const summary = STATE.scan.summary || {};
+      const cards = [
+        { label:"Exposure Score", value:num(summary.exposure_score), sub:`Grade ${esc(summary.grade || "—")} · ${esc(summary.risk_level || "—")}`, color:scoreColor(num(summary.exposure_score)) },
+        { label:"Assets Discovered", value:num(summary.assets_discovered), sub:`${num(summary.assets_active)} active · ${num(summary.assets_flaky)} flaky · ${num(summary.assets_inactive)} inactive`, color:SEVERITY_COLOR.INFO },
+        { label:"Critical", value:num(summary.severity_counts && summary.severity_counts.CRITICAL), sub:"immediate action", color:SEVERITY_COLOR.CRITICAL },
+        { label:"High", value:num(summary.severity_counts && summary.severity_counts.HIGH), sub:"prioritized queue", color:SEVERITY_COLOR.HIGH },
+        { label:"Medium", value:num(summary.severity_counts && summary.severity_counts.MEDIUM), sub:"hardening backlog", color:SEVERITY_COLOR.MEDIUM },
+        { label:"Low", value:num(summary.severity_counts && summary.severity_counts.LOW), sub:"hygiene", color:SEVERITY_COLOR.LOW },
+        { label:"Attack Chains", value:num(summary.chains_detected), sub:`${num(summary.findings_total)} findings`, color:"#c084fc" },
+        { label:"Scan Duration", value:`${num(STATE.scan.duration_sec)}s`, sub:`Fernet AES · ${num(summary.avg_confidence_pct)}% avg confidence`, color:SEVERITY_COLOR.INFO },
+      ];
+      $("kpiStrip").innerHTML = cards.map((c) => `<div class="card px-3 py-2.5"><div class="kpi-label">${esc(c.label)}</div><div class="kpi-value" style="color:${c.color}">${esc(c.value)}</div><div class="text-[10px] text-slate-500 mt-0.5 truncate" title="${esc(c.sub)}">${esc(c.sub)}</div></div>`).join("");
+      renderGraph(STATE.scan.graph || { nodes:[], edges:[] });
+      renderGraphFilterChip();
+      renderFindings();
+      renderChains();
+      renderAssets();
+      const id = STATE.scan.scan_id || STATE.scan.id;
+      $("scanMeta").textContent = id
+        ? `Scan #${id} · ${esc(STATE.scan.target || "")} · ${esc(STATE.scan.mode || "")} · ${String(STATE.scan.scanned_at || "").slice(0,19)}`
+        : `Podgląd demo (niezapisany) · ${esc(STATE.scan.target || "")}`;
+      if (STATE.cy) setTimeout(() => { STATE.cy.resize(); fitGraph(); }, 40);
+    }
+
+    async function loadScanById(scanId, switchToDashboard = true) {
+      try {
+        const scan = await api(`/api/scans/${scanId}`);
+        renderScan(scan);
+        if (switchToDashboard) switchTab("dashboard");
+        toast(`Załadowano scan #${scanId}`, "ok");
+      } catch (e) { toast(e.message, "error"); }
+    }
+
+    async function runDemo(variant) {
+      if (!isPermittedAny("add","modify")) { toast("Twoja rola nie pozwala uruchamiać skanów.", "error"); return; }
+      try {
+        const data = await api("/api/scan", { method:"POST", body: { mode:`demo${variant}`, target:"agh-infra.demo" } });
+        renderScan(data);
+        switchTab("dashboard");
+        toast(`Demo Run ${variant} zapisany jako scan #${data.scan_id}`, "ok");
+        await loadScans();
+      } catch (e) { toast(e.message, "error"); }
+    }
+
+    /* ------------------------------------------------------------------ */
+    /* Persistent overrides                                               */
+    /* ------------------------------------------------------------------ */
+    function openOverride(kind, key) {
+      if (!isPermitted("modify")) return toast("Wymagane uprawnienie modify.", "error");
+      if (!STATE.scan) return toast("Najpierw załaduj scan.", "error");
+      let target = null;
+      let assetKey = key;
+      let type = kind;
+      if (kind === "host") {
+        target = list(STATE.scan.subdomains).find((a) => a.host === key) || null;
+      } else {
+        target = list(STATE.scan.findings).find((f) => f.id === key) || null;
+        if (target) assetKey = `finding:${target.fingerprint || target.id}`;
+      }
+      if (!target) return toast("Nie znaleziono obiektu do edycji.", "error");
+      $("overrideTitle").textContent = kind === "host" ? `Edit Asset — ${key}` : `Edit Finding — ${key}`;
+      $("ovKey").value = assetKey;
+      $("ovType").value = type;
+      $("ovScanId").value = STATE.scan.scan_id || STATE.scan.id || "";
+      $("ovNotes").value = target.notes || "";
+      $("ovTags").value = list(target.tags).join(", ");
+      $("ovSeverity").value = target.custom_severity || (kind === "finding" ? target.severity || "" : "");
+      $("ovStatus").value = target.status_override || "";
+      openModal("overrideModal");
+    }
+
+    async function saveOverride(event) {
+      event.preventDefault();
+      const scanId = Number($("ovScanId").value) || null;
+      const body = {
+        asset_key: $("ovKey").value,
+        asset_type: $("ovType").value,
+        scan_id: scanId,
+        notes: $("ovNotes").value,
+        tags: $("ovTags").value.split(",").map((t)=>t.trim()).filter(Boolean),
+        custom_severity: $("ovSeverity").value || null,
+        status_override: $("ovStatus").value || null,
+      };
+      try {
+        await api("/api/overrides", { method:"POST", body });
+        closeModal("overrideModal");
+        toast("Override zapisany — przetrwa kolejne skany.", "ok");
+        if (scanId) await loadScanById(scanId, false);
+        else renderScan(STATE.scan);
+        await loadHostHistory();
+      } catch (e) { toast(e.message, "error"); }
+    }
+
+    /* ------------------------------------------------------------------ */
+    /* Exports + DefectDojo                                               */
+    /* ------------------------------------------------------------------ */
+    async function downloadWithAuth(path, filename) {
+      const res = await fetch(path, { headers: authHeaders() });
+      if (!res.ok) {
+        let detail = `HTTP ${res.status}`;
+        try { const d = await res.json(); detail = d.detail || detail; } catch {}
+        throw new Error(detail);
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url; a.download = filename;
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }
+
+    async function exportScan(fmt) {
+      const id = STATE.scan && (STATE.scan.scan_id || STATE.scan.id);
+      if (!id) return toast("Brak zapisanego scanu do eksportu.", "error");
+      try {
+        const ext = fmt === "csv" ? "csv" : "json";
+        await downloadWithAuth(`/api/export/${id}?fmt=${encodeURIComponent(fmt)}`, `asi-scan-${id}-${fmt}.${ext}`);
+        toast(`Eksport ${fmt.toUpperCase()} pobrany.`, "ok");
+      } catch (e) { toast(e.message, "error"); }
+    }
+
+    function openDojoModal() {
+      const id = STATE.scan && (STATE.scan.scan_id || STATE.scan.id);
+      if (!id) return toast("Brak zapisanego scanu.", "error");
+      $("dojoScanId").textContent = id;
+      $("dojoError").classList.add("hidden");
+      openModal("dojoModal");
+    }
+
+    async function pushDojo(event) {
+      event.preventDefault();
+      const id = STATE.scan && (STATE.scan.scan_id || STATE.scan.id);
+      const err = $("dojoError"); err.classList.add("hidden");
+      try {
+        const data = await api("/api/defectdojo/push", {
+          method:"POST", body: {
+            scan_id: id,
+            url: $("dojoUrl").value.trim(),
+            api_token: $("dojoToken").value.trim(),
+            engagement_id: Number($("dojoEngagement").value),
+          },
+        });
+        closeModal("dojoModal");
+        toast(`DefectDojo: ${data.findings} findings (HTTP ${data.status_code}).`, "ok");
+      } catch (e) { $("dojoError").textContent = e.message; $("dojoError").classList.remove("hidden"); }
+    }
+
+    /* ------------------------------------------------------------------ */
+    /* Scanner & import                                                   */
+    /* ------------------------------------------------------------------ */
+    function fillCidr() { $("targetsInput").value = "10.0.0.0/18"; toast("Wstawiono 10.0.0.0/18 — 16 382 hostów.", "info"); }
+    function fillDemoTargets() { $("targetsInput").value = "agh-infra.demo\nexample.com"; }
+
+    function planCard(p) {
+      const badge = p.supports_10k_scale
+        ? `<span class="badge" style="background:#052e16;color:#86efac;border-color:#166534">✅ 10,000+ IP Ready</span>`
+        : `<span class="badge" style="background:#422006;color:#fde68a;border-color:#a16207">small range</span>`;
+      const items = [
+        ["Total hosts", num(p.total_hosts).toLocaleString("pl-PL")],
+        ["Optimal chunk", num(p.optimal_chunk_size).toLocaleString("pl-PL")],
+        ["Total chunks", num(p.total_chunks)],
+        ["Est. duration", p.eta_human || `${num(p.estimated_duration_sec)}s`],
+        ["Windows needed", num(p.windows_needed)],
+        ["Window capacity", num(p.window_capacity).toLocaleString("pl-PL")],
+      ];
+      return `<div class="rounded-lg border border-cyan-900/60 bg-cyan-950/20 p-3 space-y-2">
+        <div class="flex flex-wrap items-center gap-2">${badge}<span class="text-[11px] text-slate-400">lazy CIDR · no full expansion</span></div>
+        <div class="grid grid-cols-2 md:grid-cols-3 gap-2">${items.map(([k,v]) => `<div class="rounded bg-slate-950/50 border border-slate-800 px-2 py-1.5"><div class="kpi-label">${esc(k)}</div><div class="text-sm font-bold text-slate-100">${esc(v)}</div></div>`).join("")}</div>
+        <p class="text-[10px] text-slate-500 font-mono break-all">sample: ${esc(list(p.sample_targets).join(", ") || "—")}</p>
+      </div>`;
+    }
+
+    async function calculatePlan() {
+      const raw = $("targetsInput").value.trim();
+      if (!raw) return toast("Podaj IP, CIDR lub domenę.", "error");
+      $("planResult").innerHTML = `<p class="text-xs text-slate-400">Obliczanie planu…</p>`;
+      try {
+        const plan = await api("/api/plan", { method:"POST", body: {
+          targets: raw.split(/[\n,;]+/).map((s)=>s.trim()).filter(Boolean),
+          rate_limit_rps: Number($("rateInput").value) || 5,
+          window_minutes: Number($("windowInput").value) || 60,
+        }});
+        $("planResult").innerHTML = planCard(plan);
+      } catch (e) { $("planResult").innerHTML = `<p class="text-xs text-rose-300">${esc(e.message)}</p>`; }
+    }
+
+    function collectScanInput() {
+      const raw = $("targetsInput").value.trim();
+      const targets = raw.split(/[\n,;]+/).map((s)=>s.trim()).filter(Boolean);
+      const ports = $("allowedPorts").value.split(",").map((p)=>Number(p.trim())).filter((p)=>p>0);
+      return {
+        mode:"live", targets, target: targets[0] || null,
+        rate_limit_rps: Number($("rateInput").value) || 5,
+        window_start: $("windowStart").value.trim() || null,
+        window_end: $("windowEnd").value.trim() || null,
+        cursor: Number($("cursorInput").value) || 0,
+        batch_limit: Number($("batchInput").value) || null,
+        scan_ports: $("scanPorts").checked,
+        allowed_ports: ports.length ? ports : null,
+      };
+    }
+
+    function renderRunResult(data) {
+      const status = String(data.scan_status || "completed");
+      const isPaused = status.startsWith("paused");
+      const badge = isPaused
+        ? `<span class="badge" style="background:#422006;color:#fde68a;border-color:#a16207">${esc(status)}</span>`
+        : `<span class="badge" style="background:#052e16;color:#86efac;border-color:#166534">${esc(status)}</span>`;
+      const resume = isPaused && data.next_cursor != null && data.next_cursor !== undefined
+        ? `<button class="btn btn-primary" onclick="resumeScan()">⏭ Resume Next Chunk (cursor ${esc(data.next_cursor)})</button>` : "";
+      $("scanRunResult").innerHTML = `<div class="rounded-lg border border-slate-800 bg-slate-950/40 p-3 space-y-2">
+        <div class="flex flex-wrap items-center gap-2">${badge}<span class="text-[11px] text-slate-400">scan #${esc(data.scan_id || "—")} · ${esc(data.hosts_scanned)}/${esc(data.total_hosts)} hosts · ${esc(data.duration_sec)}s</span></div>
+        ${resume}
+        <p class="text-[10px] text-slate-500">Fernet AES — wynik zapisany w SQLite (payload_enc / summary_enc).</p>
+      </div>`;
+    }
+
+    async function runLiveScan() {
+      if (!isPermittedAny("add","modify")) return toast("Wymagane uprawnienie add lub modify.", "error");
+      const body = collectScanInput();
+      if (!body.targets.length) return toast("Podaj co najmniej jeden target.", "error");
+      STATE.lastScanInput = body;
+      $("scanRunResult").innerHTML = `<p class="text-xs text-slate-400">Skanowanie z rate-limit ${esc(body.rate_limit_rps)} rps…</p>`;
+      try {
+        const data = await api("/api/scan", { method:"POST", body });
+        STATE.lastNextCursor = data.next_cursor;
+        renderScan(data);
+        renderRunResult(data);
+        await loadScans();
+        toast(`Scan #${data.scan_id} — ${data.scan_status}`, data.scan_status === "completed" ? "ok" : "info");
+      } catch (e) { $("scanRunResult").innerHTML = `<p class="text-xs text-rose-300">${esc(e.message)}</p>`; }
+    }
+
+    async function resumeScan() {
+      if (!STATE.lastScanInput || STATE.lastNextCursor == null) return;
+      const body = { ...STATE.lastScanInput, cursor: STATE.lastNextCursor };
+      $("scanRunResult").innerHTML = `<p class="text-xs text-slate-400">Wznawianie od cursor ${esc(STATE.lastNextCursor)}…</p>`;
+      try {
+        const data = await api("/api/scan", { method:"POST", body });
+        STATE.lastNextCursor = data.next_cursor;
+        $("cursorInput").value = data.next_cursor ?? "";
+        renderScan(data);
+        renderRunResult(data);
+        await loadScans();
+        toast(`Wznowiono — ${data.scan_status}`, "ok");
+      } catch (e) { $("scanRunResult").innerHTML = `<p class="text-xs text-rose-300">${esc(e.message)}</p>`; }
+    }
+
+    async function doImport(body) {
+      if (!isPermitted("add")) return toast("Import wymaga uprawnienia add.", "error");
+      $("importResult").innerHTML = `<p class="text-xs text-slate-400">Przetwarzanie importu…</p>`;
+      try {
+        const data = await api("/api/import", { method:"POST", body });
+        renderScan(data);
+        $("importResult").innerHTML = `<p class="text-xs text-emerald-300">Zaimportowano ${esc(data.subdomains ? data.subdomains.length : 0)} assetów · scan #${esc(data.scan_id)}</p>`;
+        switchTab("dashboard");
+        await loadScans();
+        toast(`Import zapisany jako scan #${data.scan_id}`, "ok");
+      } catch (e) { $("importResult").innerHTML = `<p class="text-xs text-rose-300">${esc(e.message)}</p>`; }
+    }
+
+    async function handleImportFile(event) {
+      const file = event.target.files && event.target.files[0];
+      if (!file) return;
+      const text = await file.text();
+      const ext = (file.name.split(".").pop() || "").toLowerCase();
+      const format = ext === "xml" ? "nmap" : ext === "csv" ? "csv" : "json";
+      await doImport({ format, filename: file.name, content: text });
+      event.target.value = "";
+    }
+
+    async function importSample() { await doImport({ format:"nmap", filename:"agh-internal-lab.xml", sample:true }); }
+
+    async function importManual() {
+      const host = $("mHost").value.trim();
+      if (!host) return toast("Podaj host.", "error");
+      const ip = $("mIp").value.trim();
+      const ports = $("mPorts").value.split(",").map((p)=>p.trim()).filter(Boolean);
+      const obj = { host, ips: ip ? [ip] : [], open_ports: ports };
+      if ($("mUrl").value.trim()) obj.url = $("mUrl").value.trim();
+      if ($("mStatus").value.trim()) obj.status = Number($("mStatus").value);
+      if ($("mServer").value.trim()) obj.server = $("mServer").value.trim();
+      if ($("mTitle").value.trim()) obj.title = $("mTitle").value.trim();
+      await doImport({ format:"manual", target:host, hosts:[obj] });
+      ["mHost","mIp","mPorts","mUrl","mStatus","mServer","mTitle"].forEach((id)=>{ $(id).value = ""; });
+    }
+
+    /* ------------------------------------------------------------------ */
+    /* History, diff, stability                                           */
+    /* ------------------------------------------------------------------ */
+    function statusBadge(status) {
+      const st = String(status || "completed");
+      const style = st.startsWith("paused")
+        ? "background:#422006;color:#fde68a;border-color:#a16207"
+        : "background:#052e16;color:#86efac;border-color:#166534";
+      return `<span class="badge" style="${style}">${esc(st)}</span>`;
+    }
+
+    function renderScanRows() {
+      if (!STATE.scans.length) { $("scanRows").innerHTML = `<tr><td colspan="12" class="text-center text-slate-500 py-6">Brak zapisanych skanów.</td></tr>`; return; }
+      $("scanRows").innerHTML = STATE.scans.map((s) => {
+        const id = s.scan_id || s.id;
+        const del = isPermitted("delete")
+          ? `<button class="btn btn-danger" onclick="deleteScan(${id})">🗑</button>` : "";
+        return `<tr>
+          <td class="font-mono text-cyan-300">#${esc(id)}</td><td>${esc(s.target)}</td><td>${esc(s.mode)}</td>
+          <td class="text-slate-400">${esc(String(s.scanned_at || "").slice(0,19))}</td>
+          <td>${esc(num(s.duration_sec))}s</td><td>${statusBadge(s.scan_status)}</td>
+          <td>${esc(num(s.host_count))}</td><td>${esc(num(s.findings_total))}</td>
+          <td><span class="font-bold" style="color:${scoreColor(num(s.exposure_score))}">${esc(num(s.exposure_score))}</span></td>
+          <td>${esc(s.grade || "—")}</td><td class="text-slate-500">${esc(s.created_by || "—")}</td>
+          <td class="text-right whitespace-nowrap"><button class="btn btn-ghost" onclick="loadScanById(${id})">📂 Load</button> ${del}</td>
+        </tr>`;
+      }).join("");
+    }
+
+    function populateScanSelectors() {
+      const options = STATE.scans.map((s) => { const id = s.scan_id || s.id; return `<option value="${esc(id)}">#${esc(id)} · ${esc(s.target)} · ${esc(String(s.scanned_at||"").slice(0,16))}</option>`; }).join("");
+      $("baseScan").innerHTML = options; $("currScan").innerHTML = options;
+      if (STATE.scans.length > 1) { $("baseScan").value = String(STATE.scans[1].scan_id || STATE.scans[1].id); $("currScan").value = String(STATE.scans[0].scan_id || STATE.scans[0].id); }
+    }
+
+    async function loadScans() {
+      if (!STATE.user) return;
+      try { STATE.scans = list(await api("/api/scans")); renderScanRows(); populateScanSelectors(); } catch (e) { toast(e.message, "error"); }
+    }
+
+    async function deleteScan(scanId) {
+      if (!isPermitted("delete")) return toast("Wymagane uprawnienie delete.", "error");
+      if (!confirm(`Usunąć scan #${scanId}?`)) return;
+      try { await api(`/api/scans/${scanId}`, { method:"DELETE" }); toast(`Usunięto scan #${scanId}`, "ok"); await loadScans(); } catch (e) { toast(e.message, "error"); }
+    }
+
+    async function loadHostHistory() {
+      if (!STATE.user) return;
+      try { STATE.hostHistory = list(await api("/api/host-history")); renderHostHistory(); } catch (e) { toast(e.message, "error"); }
+    }
+
+    function renderHostHistory() {
+      const rows = [...STATE.hostHistory].sort((a,b) => String(a.host).localeCompare(String(b.host)));
+      $("hostCount").textContent = `${rows.length} hosts`;
+      if (!rows.length) { $("hostRows").innerHTML = `<tr><td colspan="8" class="text-center text-slate-500 py-6">Brak historii hostów.</td></tr>`; return; }
+      $("hostRows").innerHTML = rows.map((h) => {
+        const unstable = h.stability === "flaky" || h.stability === "inactive" || h.stability === "unreachable";
+        const slots = list(h.time_slots);
+        return `<tr style="${unstable?"background:rgba(120,53,15,.14)":""}">
+          <td class="font-mono text-cyan-300">${esc(h.host)}</td>
+          <td>${stabilityBadge(h.stability, h.confidence_pct)}</td>
+          <td><div class="flex items-center gap-1.5"><div class="h-1.5 w-16 rounded bg-slate-800 overflow-hidden"><div class="h-full" style="width:${Math.max(0,Math.min(100,num(h.confidence_pct)))}%;background:${scoreColor(100-num(h.confidence_pct))}"></div></div><span class="text-[10px] text-slate-400">${esc(num(h.confidence_pct))}%</span></div></td>
+          <td>${esc(num(h.seen_count))} / ${esc(num(h.scan_count))}</td>
+          <td>${esc(num(h.missed_streak))}</td>
+          <td class="text-slate-500">${esc(String(h.first_seen||"").slice(0,19))}</td>
+          <td class="text-slate-500">${esc(String(h.last_seen||"").slice(0,19))}</td>
+          <td class="text-slate-500 text-[10px]" title="${esc(slots.join(" | "))}">${esc(slots.slice(-3).join(" · ") || "—")}</td>
+        </tr>`;
+      }).join("");
+    }
+
+    function diffList(title, items, render, accent) {
+      return `<div class="rounded-lg border border-slate-800 bg-slate-950/40 p-2.5" style="${accent?"border-color:"+accent:""}">
+        <p class="text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">${esc(title)} <span class="chip ml-1">${items.length}</span></p>
+        ${items.length ? `<div class="space-y-1">${items.map(render).join("")}</div>` : `<p class="text-[11px] text-slate-600">Brak zmian.</p>`}
+      </div>`;
+    }
+
+    function renderDiff(d) {
+      const delta = num(d.score_delta);
+      const deltaColor = delta > 0 ? SEVERITY_COLOR.CRITICAL : delta < 0 ? SEVERITY_COLOR.LOW : "#94a3b8";
+      const assetLine = (a) => `<div class="text-[11px] flex flex-wrap items-center gap-1.5"><span class="font-mono text-cyan-300">${esc(a.host)}</span>${stabilityBadge(a.stability, a.confidence_pct)}<span class="text-slate-500">${esc(list(a.ips).join(", ")||list(a.cnames).join(", ")||"—")}</span></div>`;
+      const changedLine = (c) => `<div class="text-[11px] space-y-0.5"><div class="flex flex-wrap items-center gap-1.5"><span class="font-mono text-cyan-300">${esc(c.host)}</span>${c.went_offline?`<span class="badge st-inactive">went offline</span>`:""}${stabilityBadge(c.stability, c.confidence_pct)}</div>${list(c.added).length?`<div class="text-emerald-300">+ ${esc(list(c.added).join(", "))}</div>`:""}${list(c.removed).length?`<div class="text-rose-300">− ${esc(list(c.removed).join(", "))}</div>`:""}</div>`;
+      const findingLine = (f) => `<div class="text-[11px] flex flex-wrap items-center gap-1.5">${severityBadge(f.severity)}<span class="text-slate-200">${esc(f.title)}</span><span class="font-mono text-slate-500">${esc(f.host)}</span>${f.cve?`<span class="chip">${esc(f.cve)}</span>`:""}</div>`;
+      $("diffResult").innerHTML = `
+        <div class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-2">
+          <div class="rounded-lg border border-slate-800 bg-slate-950/40 px-2.5 py-2"><div class="kpi-label">Score delta</div><div class="text-lg font-black" style="color:${deltaColor}">${delta>0?"+":""}${delta}</div><div class="text-[10px] text-slate-500">${num(d.previous_score)} → ${num(d.current_score)}</div></div>
+          ${[["New assets",d.new_assets,"#4ade80"],["Removed assets",d.removed_assets,"#f87171"],["Changed services",d.changed_services,"#facc15"],["New findings",d.new_findings,"#fb923c"],["Resolved findings",d.resolved_findings,"#4ade80"]].map(([label,items,color]) => `<div class="rounded-lg border border-slate-800 bg-slate-950/40 px-2.5 py-2"><div class="kpi-label">${esc(label)}</div><div class="text-lg font-black" style="color:${color}">${list(items).length}</div></div>`).join("")}
+        </div>
+        <div class="grid xl:grid-cols-2 gap-3 mt-3">
+          ${diffList("New Assets",list(d.new_assets),assetLine,"#166534")}
+          ${diffList("Disappearing / Removed Assets",list(d.removed_assets),assetLine,"#991b1b")}
+          ${diffList("Changed Services",list(d.changed_services),changedLine,"#a16207")}
+          ${diffList("New Findings",list(d.new_findings),findingLine,"#c2410c")}
+          ${diffList("Resolved Findings",list(d.resolved_findings),findingLine,"#166534")}
+        </div>`;
+    }
+
+    async function compareScans() {
+      const base = $("baseScan").value; const curr = $("currScan").value;
+      if (!base || !curr) return toast("Wybierz dwa scany.", "error");
+      try { const d = await api(`/api/diff?base_id=${encodeURIComponent(base)}&curr_id=${encodeURIComponent(curr)}`); renderDiff(d); toast("Diff obliczony.", "ok"); } catch (e) { toast(e.message, "error"); }
+    }
+
+    /* ------------------------------------------------------------------ */
+    /* Signatures                                                         */
+    /* ------------------------------------------------------------------ */
+    async function loadSignatures() {
+      if (!STATE.user) return;
+      try { STATE.signatures = list(await api("/api/signatures")); renderSigRows(); } catch (e) { toast(e.message, "error"); }
+    }
+
+    function renderSigRows() {
+      if (!STATE.signatures.length) { $("sigRows").innerHTML = `<tr><td colspan="5" class="text-center text-slate-500 py-6">Brak sygnatur.</td></tr>`; return; }
+      $("sigRows").innerHTML = STATE.signatures.map((s) => {
+        const match = s.match_type === "path" ? `GET ${esc(s.path||"/")} → ${esc(s.match_value||"status_lt_400")}` : `${esc(s.match_key ? s.match_key+": ":"")}${esc(s.match_value||"—")}`;
+        const del = isPermitted("delete") ? `<button class="btn btn-danger" onclick="deleteSignature(${s.id})">🗑</button>` : "";
+        return `<tr><td><div class="text-slate-200 font-semibold">${esc(s.name)}</div><div class="text-[10px] text-slate-500">${esc(s.category||"")}${s.builtin?" · builtin":""}</div></td><td><span class="chip">${esc(s.match_type)}</span></td><td class="font-mono text-[10px] text-slate-400 max-w-[240px] break-all">${match}</td><td>${severityBadge(s.severity)}</td><td class="text-right">${del}</td></tr>`;
+      }).join("");
+    }
+
+    async function addSignature(event) {
+      event.preventDefault();
+      if (!isPermitted("add")) return toast("Wymagane uprawnienie add.", "error");
+      const type = $("sigType").value; const key = $("sigKey").value.trim(); const value = $("sigValue").value.trim();
+      const body = {
+        name: $("sigName").value.trim(), category: $("sigCategory").value.trim() || "Signature Match",
+        match_type: type,
+        match_key: type === "header" ? key : null,
+        match_value: type === "path" ? (value || "status_lt_400") : (value || key || null),
+        path: type === "path" ? (key || value || "/") : null,
+        severity: $("sigSeverity").value,
+        description: $("sigDesc").value.trim() || null, remediation: $("sigFix").value.trim() || null,
+      };
+      if (!body.name) return toast("Nazwa sygnatury jest wymagana.", "error");
+      try { await api("/api/signatures", { method:"POST", body }); toast("Sygnatura dodana.", "ok"); $("sigName").value=""; $("sigKey").value=""; $("sigValue").value=""; $("sigDesc").value=""; $("sigFix").value=""; await loadSignatures(); } catch (e) { toast(e.message, "error"); }
+    }
+
+    async function deleteSignature(id) {
+      if (!isPermitted("delete")) return toast("Wymagane uprawnienie delete.", "error");
+      if (!confirm("Usunąć tę sygnaturę?")) return;
+      try { await api(`/api/signatures/${id}`, { method:"DELETE" }); toast("Sygnatura usunięta.", "ok"); await loadSignatures(); } catch (e) { toast(e.message, "error"); }
+    }
+
+    /* ------------------------------------------------------------------ */
+    /* RBAC users & roles                                                 */
+    /* ------------------------------------------------------------------ */
+    async function loadUsersAndRoles() {
+      if (!isPermitted("manage_users")) return;
+      try {
+        STATE.roles = list(await api("/api/roles"));
+        const users = list(await api("/api/users"));
+        $("userRows").innerHTML = users.map((u) => `<tr><td class="font-mono text-cyan-300">${esc(u.username)}</td><td>${esc(u.role)}</td><td class="text-slate-400">${esc(u.role_label || ROLE_LABELS[u.role] || u.role)}</td><td class="flex flex-wrap gap-1">${list(u.permissions).map((p)=>`<span class="chip">${esc(p)}</span>`).join("")}</td></tr>`).join("") || `<tr><td colspan="4" class="text-center text-slate-500 py-4">Brak użytkowników.</td></tr>`;
+        $("newRole").innerHTML = STATE.roles.map((r)=>`<option value="${esc(r.key)}">${esc(r.key)} — ${esc(r.label)}</option>`).join("");
+      } catch (e) { toast(e.message, "error"); }
+    }
+
+    async function createUser() {
+      if (!isPermitted("manage_users")) return toast("Wymagane manage_users.", "error");
+      try { await api("/api/users", { method:"POST", body: { username:$("newUsername").value.trim(), password:$("newPassword").value, role:$("newRole").value } }); toast("Użytkownik utworzony.", "ok"); $("newUsername").value=""; $("newPassword").value=""; await loadUsersAndRoles(); } catch (e) { toast(e.message, "error"); }
+    }
+
+    async function createRole() {
+      if (!isPermitted("manage_users")) return toast("Wymagane manage_users.", "error");
+      const permissions = Array.from(document.querySelectorAll("#rolePermBoxes input:checked")).map((i)=>i.value);
+      try { await api("/api/roles", { method:"POST", body: { key:$("roleKey").value.trim(), label:$("roleLabel").value.trim()||null, permissions } }); toast("Rola utworzona.", "ok"); $("roleKey").value=""; $("roleLabel").value=""; await loadUsersAndRoles(); } catch (e) { toast(e.message, "error"); }
+    }
+
+    /* ------------------------------------------------------------------ */
+    /* Bootstrap                                                          */
+    /* ------------------------------------------------------------------ */
+    async function bootstrapData() {
+      if (!STATE.user) return;
+      await loadScans();
+      await loadSignatures();
+      await loadHostHistory();
+      if (isPermitted("manage_users")) await loadUsersAndRoles();
+      if (STATE.scans.length) {
+        const newest = STATE.scans[0].scan_id || STATE.scans[0].id;
+        try { renderScan(await api(`/api/scans/${newest}`)); } catch (e) { toast(e.message, "error"); }
+      }
+    }
+
+    window.addEventListener("DOMContentLoaded", () => {
+      ensureGraph();
+      renderKpisEmpty();
+      renderAuth();
+      document.querySelectorAll("#loginModal, #overrideModal, #dojoModal").forEach((m) => {
+        m.addEventListener("click", (e) => { if (e.target === m) m.classList.add("hidden"); });
+      });
+      if (STATE.token) {
+        api("/api/me").then((user) => { STATE.user = user; renderAuth(); return bootstrapData(); }).catch(() => logout(false));
+      } else {
+        openModal("loginModal");
+      }
+    });
+
+    function renderKpisEmpty() {
+      $("kpiStrip").innerHTML = `<div class="card px-3 py-2.5"><div class="kpi-label">Exposure Score</div><div class="kpi-value">—</div></div>`;
+    }
   </script>
 </body>
 </html>

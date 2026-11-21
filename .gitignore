@@ -2,6 +2,10 @@
 __pycache__/
 *.pyc
 .env
-GEMINI.md
 *.db
+*.db-wal
+*.db-shm
 .asi_key
+opencode.json
+AGENTS.md
+GEMINI.md

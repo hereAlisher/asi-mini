@@ -2,3 +2,4 @@
 uvicorn
 httpx
 dnspython
+cryptography
