@@ -1,0 +1,10 @@
+﻿
+services:
+  asi:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      - ASI_DATA_DIR=/app/data
+    volumes:
+      - ./data:/app/data

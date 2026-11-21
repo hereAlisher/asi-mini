@@ -7,6 +7,8 @@ from __future__ import annotations
 
 import json
 import re
+import asyncio
+from datetime import datetime, timezone
 from contextlib import asynccontextmanager
 from typing import Any
 
@@ -32,10 +34,147 @@ from scanner import (
 storage.init_db()
 
 
+# ---------------------------------------------------------------------------
+# Background cyclic scheduler
+# ---------------------------------------------------------------------------
+_scheduler_task: asyncio.Task | None = None
+SCHEDULER_TICK_SEC = 15
+
+
+async def _scheduler_loop() -> None:
+    """Background tick that runs the next chunk of each active scan job."""
+    while True:
+        await asyncio.sleep(SCHEDULER_TICK_SEC)
+        try:
+            await _run_due_jobs()
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            # Never let a scheduler error kill the app.
+            pass
+
+
+async def _run_due_jobs() -> None:
+    """Iterate scan_jobs and run the next chunk for any job due for execution."""
+    now = datetime.now(timezone.utc)
+    jobs = storage.list_scan_jobs()
+    for job in jobs:
+        status = job.get("status") or "pending"
+        if status not in ("active", "paused_window_expired"):
+            continue
+
+        # Parse window.
+        ws = job.get("window_start")
+        we = job.get("window_end")
+        try:
+            ws_dt = datetime.fromisoformat(str(ws).replace("Z", "+00:00")) if ws else None
+        except (TypeError, ValueError):
+            ws_dt = None
+        try:
+            we_dt = datetime.fromisoformat(str(we).replace("Z", "+00:00")) if we else None
+        except (TypeError, ValueError):
+            we_dt = None
+
+        # Window checks.
+        if ws_dt and now < ws_dt:
+            continue
+        if we_dt and now >= we_dt:
+            if status != "paused_window_expired":
+                storage.update_scan_job(job["id"], status="paused_window_expired")
+            continue
+
+        # If previously paused due to expired window, a new open window clears it.
+        if status == "paused_window_expired":
+            storage.update_scan_job(job["id"], status="active")
+
+        # Interval check.
+        interval = int(job.get("interval_minutes") or 60)
+        updated_at = job.get("updated_at")
+        if updated_at:
+            try:
+                updated_dt = datetime.fromisoformat(str(updated_at).replace("Z", "+00:00"))
+                if (now - updated_dt).total_seconds() < interval * 60:
+                    continue
+            except (TypeError, ValueError):
+                pass
+
+        # Run the next chunk immediately (scheduler context, no user token needed).
+        await _run_job_chunk(job, user=None)
+
+
+async def _run_job_chunk(job: dict, user: dict | None) -> None:
+    """Execute the next subgroup chunk of a scan job, update cursor, save encrypted scan."""
+    job_id = int(job["id"])
+    targets = job.get("targets") or []
+    cursor = int(job.get("cursor") or 0)
+    chunk_size = int(job.get("chunk_size") or 256)
+
+    # Resolve host_history for flaky-host retry.
+    host_stats = storage.get_host_stats()
+
+    try:
+        raw = await scan_targets(
+            targets,
+            domain=None,
+            rate_limit_rps=float(job.get("rate_limit_rps") or 5),
+            window_start=job.get("window_start"),
+            window_end=job.get("window_end"),
+            cursor=cursor,
+            batch_limit=chunk_size,
+            scan_ports=bool(job.get("scan_ports")),
+            allowed_ports=job.get("allowed_ports"),
+            signatures=storage.list_signatures(enabled_only=True),
+            host_stats=host_stats,
+        )
+    except Exception:
+        return
+
+    status = raw.get("scan_status") or "completed"
+    next_cursor = raw.get("next_cursor")
+    total_hosts = int(raw.get("total_hosts") or 0)
+
+    # Window closed mid-run -> pause cleanly.
+    if status == "paused_window_expired":
+        storage.update_scan_job(job["id"], status="paused_window_expired",
+                                updated_at=datetime.now(timezone.utc).isoformat())
+        return
+
+    # Wrap cursor back to 0 when the full target space is finished.
+    if next_cursor is None or next_cursor >= total_hosts:
+        new_cursor = 0
+    else:
+        new_cursor = int(next_cursor)
+
+    # Finalise and save the encrypted scan (reuse the shared scan pipeline).
+    scan_user = user or {"username": "scheduler"}
+    try:
+        result = _finalize_scan(raw, scan_user, duration_sec=raw.get("duration_sec"))
+    except Exception:
+        return
+
+    storage.update_scan_job(
+        job["id"],
+        cursor=new_cursor,
+        last_scan_id=result.get("scan_id"),
+        status="active" if status == "completed" else status,
+        updated_at=datetime.now(timezone.utc).isoformat(),
+    )
+
+
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     storage.init_db()
-    yield
+    global _scheduler_task
+    _scheduler_task = asyncio.create_task(_scheduler_loop())
+    try:
+        yield
+    finally:
+        if _scheduler_task:
+            _scheduler_task.cancel()
+            try:
+                await _scheduler_task
+            except asyncio.CancelledError:
+                pass
 
 
 app = FastAPI(title="ASI Mini - CBI AGH", version="2.0.0", lifespan=lifespan)
@@ -155,6 +294,8 @@ PERMISSION_RULES: list[tuple[str, str, Any]] = [
     ("GET", r"^/api/host-history$", "read"),
     ("GET", r"^/api/jobs$", "read"),
     ("POST", r"^/api/jobs$", "add"),
+    ("POST", r"^/api/jobs/\d+/run-now$", ("modify", "add")),
+    ("DELETE", r"^/api/jobs/\d+$", "delete"),
 ]
 
 PUBLIC_EXACT = {"/", "/api/health", "/api/login", "/docs", "/redoc", "/openapi.json", "/favicon.ico"}
@@ -592,6 +733,26 @@ async def jobs(user: dict = Depends(require("read"))):
 @app.post("/api/jobs")
 async def create_job(payload: dict = Body(default={}), user: dict = Depends(require("add"))):
     return storage.create_scan_job(payload, user.get("username"))
+
+
+@app.post("/api/jobs/{job_id}/run-now")
+async def run_job_now(job_id: int, user: dict = Depends(require("modify", "add"))):
+    job = storage.get_scan_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found.")
+    await _run_job_chunk(job, user=user)
+    storage.update_scan_job(
+        job["id"],
+        updated_at=datetime.now(timezone.utc).isoformat(),
+    )
+    return storage.list_scan_jobs()
+
+
+@app.delete("/api/jobs/{job_id}")
+async def delete_job(job_id: int, user: dict = Depends(require("delete"))):
+    if not storage.delete_scan_job(job_id):
+        raise HTTPException(status_code=404, detail="Job not found.")
+    return {"ok": True, "deleted": job_id}
 
 
 @app.get("/")

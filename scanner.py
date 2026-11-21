@@ -665,7 +665,7 @@ def run_nmap_scan(hosts: list[str], ports: list[int], timeout: float = 60.0) -> 
     if not hosts or not nmap_available():
         return None
     try:
-        cmd = ["nmap", "-Pn", "-n", "--open", "-T4", "-p", ",".join(str(p) for p in ports), "-oX", "-", *hosts[:64]]
+        cmd = ["nmap", "-Pn", "-sT", "-sV", "-p", ",".join(str(p) for p in ports), "-oX", "-", *hosts[:64]]
         proc = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
         if proc.returncode != 0 or "<nmaprun" not in proc.stdout:
             return None
@@ -703,8 +703,15 @@ def _parse_dt(value: Any) -> datetime | None:
         return None
 
 
+def _is_reachable(asset: dict) -> bool:
+    http = asset.get("http") or {}
+    tls = asset.get("tls") or {}
+    return bool(http.get("reachable") or asset.get("open_ports") or tls.get("valid") is True)
+
+
 async def _scan_one(host: str, sem: asyncio.Semaphore, client: Any, *, scan_ports: bool,
-                    ports: list[int], signatures: list[dict], nmap_ports: list[dict] | None) -> dict:
+                    ports: list[int], signatures: list[dict], nmap_ports: list[dict] | None,
+                    is_flaky: bool = False) -> dict:
     async with sem:
         a_records, cnames = await asyncio.gather(
             asyncio.to_thread(_resolve_records, host, "A"),
@@ -735,6 +742,35 @@ async def _scan_one(host: str, sem: asyncio.Semaphore, client: Any, *, scan_port
             "sources": ["live_dns"] + (["nmap"] if nmap_ports is not None else (["tcp"] if scan_ports else [])),
         }
         asset["http"]["matched_signatures"] = evaluate_signatures(asset, signatures)
+
+        # Flaky-host auto-retry: if a previously-flaky host fails the first probe,
+        # perform 1 confirmation retry after a short delay before marking unreachable.
+        if is_flaky and not _is_reachable(asset) and not asset.get("retried"):
+            await asyncio.sleep(0.3)
+            tls2, http2 = await asyncio.gather(
+                asyncio.to_thread(inspect_tls, host),
+                fingerprint_http(host, client, signature_paths),
+            )
+            if scan_ports and nmap_ports is None:
+                target = a_records[0] if a_records else host
+                open_ports2 = await tcp_port_check(target, ports)
+            else:
+                open_ports2 = open_ports if nmap_ports is not None else []
+            http2["technologies"] = detect_technologies(http2, open_ports2)
+            http2["matched_signatures"] = evaluate_signatures({
+                "host": host, "http": http2, "open_ports": open_ports2,
+            }, signatures)
+            asset = {
+                "host": host,
+                "ips": a_records,
+                "cnames": cnames,
+                "mx": [],
+                "tls": tls2,
+                "http": http2,
+                "open_ports": open_ports2,
+                "sources": ["live_dns"] + (["nmap"] if nmap_ports is not None else (["tcp"] if scan_ports else [])),
+                "retried": True,
+            }
         return asset
 
 
@@ -752,6 +788,7 @@ async def scan_targets(
     signatures: list[dict] | None = None,
     max_concurrency: int = 8,
     dns_root: dict | None = None,
+    host_stats: dict | None = None,
 ) -> dict:
     started = time.perf_counter()
     signatures = signatures if signatures is not None else DEFAULT_SIGNATURES
@@ -787,6 +824,13 @@ async def scan_targets(
     if not hosts:
         return base_result("completed", None)
 
+    # Determine which hosts are currently flaky (from host_history) for auto-retry.
+    flaky_hosts: set[str] = set()
+    if host_stats:
+        for key, stats in host_stats.items():
+            if stats.get("stability") == "flaky":
+                flaky_hosts.add(str(stats.get("host", key)).lower())
+
     nmap_map: dict[str, list[dict]] | None = None
     if scan_ports and len(hosts) <= 64 and nmap_available():
         nmap_map = await asyncio.to_thread(run_nmap_scan, hosts, ports, 45.0)
@@ -809,7 +853,8 @@ async def scan_targets(
             nmap_ports = nmap_map.get(host.lower()) if nmap_map else None
             tasks.append(asyncio.create_task(
                 _scan_one(host, sem, client, scan_ports=scan_ports, ports=ports,
-                          signatures=signatures, nmap_ports=nmap_ports)
+                          signatures=signatures, nmap_ports=nmap_ports,
+                          is_flaky=host.lower() in flaky_hosts)
             ))
             processed += 1
         results = await asyncio.gather(*tasks, return_exceptions=True)

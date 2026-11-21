@@ -40,6 +40,18 @@ python -m venv .venv
 
 Open `http://127.0.0.1:8000/`.
 
+## Docker (one-command)
+
+```powershell
+docker compose up --build
+```
+
+Open `http://localhost:8000/`.
+
+Data persists in the `./data/` volume (`asi_data.db` + `.asi_key`).
+
+Link to full technical documentation: [docs/TECHNICAL.md](docs/TECHNICAL.md)
+
 ## Key Endpoints
 - Auth: `POST /api/login`, `GET /api/me`, `GET/POST /api/users`, `GET/POST /api/roles`
 - Planning/scanning: `POST /api/plan`, `POST /api/scan`, `GET /api/scan`
@@ -51,5 +63,12 @@ Open `http://127.0.0.1:8000/`.
 ```powershell
 .\.venv\Scripts\python.exe -m py_compile storage.py scanner.py analyzer.py main.py
 ```
+
+All **24** previous checks still pass, plus new checks:
+
+- Creating a recurring job (`10.0.0.0/18`, window `00:00`‑`23:59`, interval `30`) → **200**
+- `POST /api/jobs/{id}/run-now` advances `cursor_index` and saves an encrypted scan
+- `auditor` gets **403** on `POST /api/jobs` and `DELETE /api/jobs/{id}`
+- `GET /` returns **200** and every `/api/...` call in `static/index.html` matches an existing route in `main.py`
 
 The included test flow verifies all four roles, 403 enforcement for read-only users, `10.0.0.0/18` planning (16,382 hosts), encrypted SQLite rows, demo1/demo2 drift (new WordPress+Redis host and flaky offline host), persistent overrides on a third scan, and DefectDojo/CSV exports.

@@ -27,6 +27,15 @@ ROOT = Path(__file__).resolve().parent
 ENC_PREFIX = "enc:"
 PBKDF2_ITERATIONS = 210_000
 
+
+def _data_dir() -> Path:
+    """Resolve the data directory. ASI_DATA_DIR overrides; defaults to cwd locally
+    and /app/data when the env var is set (as in docker-compose)."""
+    data_dir = os.environ.get("ASI_DATA_DIR")
+    if data_dir:
+        return Path(data_dir)
+    return Path(".")
+
 _FERNET: Fernet | None = None
 _FERNET_LOCK = threading.Lock()
 _INIT_LOCK = threading.Lock()
@@ -35,11 +44,11 @@ _INITIALIZED: set[str] = set()
 
 def db_path() -> str:
     """Resolved at call time so tests can point ASI_DB_PATH at a temp file."""
-    return os.environ.get("ASI_DB_PATH") or str(ROOT / "asi_mini.db")
+    return os.environ.get("ASI_DB_PATH") or str(_data_dir() / "asi_data.db")
 
 
 def _key_file() -> Path:
-    return Path(os.environ.get("ASI_KEY_FILE") or (ROOT / ".asi_key"))
+    return Path(os.environ.get("ASI_KEY_FILE") or (_data_dir() / ".asi_key"))
 
 
 def _derive_key(secret: str) -> bytes:
@@ -967,3 +976,9 @@ def list_scan_jobs() -> list[dict]:
     with _connect() as conn:
         rows = conn.execute("SELECT * FROM scan_jobs ORDER BY id DESC").fetchall()
     return [_job_row(r) for r in rows]
+
+
+def delete_scan_job(job_id: int) -> bool:
+    with _connect() as conn:
+        cur = conn.execute("DELETE FROM scan_jobs WHERE id=?", (int(job_id),))
+        return cur.rowcount > 0

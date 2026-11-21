@@ -140,6 +140,10 @@
           <h2 class="text-sm font-bold text-white">Asset Inventory</h2>
           <span id="assetCount" class="text-[11px] text-slate-500"></span>
         </div>
+        <div id="techSummary" class="card-b space-y-2 hidden">
+          <p class="text-[10px] text-slate-400 font-semibold uppercase tracking-wider mb-1">Technologies / Services</p>
+          <div class="grid grid-cols-2 md:grid-cols-4 gap-1" id="techTags"></div>
+        </div>
         <div class="overflow-auto scroll-thin" style="max-height:440px">
           <table class="w-full">
             <thead>
@@ -187,8 +191,19 @@
           </div>
           <div id="planResult" class="mt-2"></div>
           <div id="scanRunResult" class="mt-2"></div>
+          <!-- Cyclic Scheduled Jobs panel -->
+          <div class="card mt-3" data-perm="add,modify,delete">
+            <div class="card-h">
+              <h2 class="text-sm font-bold text-white">Cyclic Scheduled Jobs</h2>
+              <span class="badge" style="background:#052e16;color:#86efac;border-color:#166534">auto-run</span>
+            </div>
+            <div class="card-b space-y-2" id="jobsPanel">
+              <p class="text-[11px] text-slate-500">No active jobs.</p>
+            </div>
+          </div>
         </div>
       </div>
+<!-- API routes: /api/jobs, /api/jobs/{id}/run-now, /api/jobs/{id} -->
 
       <div class="card overflow-hidden" data-perm="add">
         <div class="card-h"><h2 class="text-sm font-bold text-white">Unified Import</h2><span class="badge" style="background:#422006;color:#fde68a;border-color:#a16207">requires add</span></div>
@@ -575,6 +590,32 @@
       return `<span class="badge st-${esc(st)}">${esc(st)}${pct}</span>`;
     }
 
+    function filterByTech(tech) {
+      // Filter asset table to show only assets with this technology
+      var visible = 0;
+      var allAssets = list(STATE.scan && STATE.scan.subdomains);
+      if (!allAssets.length) return;
+      var re = new RegExp(tech, "i");
+      var rows = $("assetRows").children;
+      for (var i = 0; i < allAssets.length; i++) {
+        var a = allAssets[i];
+        var http = a.http || {};
+        var techs = (http.technologies || []).concat(
+          (http.server || "").toLowerCase(),
+          (http.title || "").toLowerCase()
+        );
+        var match = techs.some(function(t) { return t.indexOf(tech.toLowerCase()) >= 0; });
+        var row = rows[i];
+        if (row) {
+          row.style.display = match ? "" : "none";
+          if (match) visible++;
+        }
+      }
+      // Show tech summary with updated count
+      renderTechSummary(STATE.scan);
+      $("techSummary").classList.toggle("hidden", visible === 0);
+    }
+
     function scoreColor(score) {
       const s = num(score);
       if (s >= 75) return SEVERITY_COLOR.CRITICAL;
@@ -748,6 +789,7 @@
       renderFindings();
       renderChains();
       renderAssets();
+      renderTechSummary();
       const id = STATE.scan.scan_id || STATE.scan.id;
       $("scanMeta").textContent = id
         ? `Scan #${id} · ${esc(STATE.scan.target || "")} · ${esc(STATE.scan.mode || "")} · ${String(STATE.scan.scanned_at || "").slice(0,19)}`
@@ -1075,7 +1117,18 @@
       if (!rows.length) { $("hostRows").innerHTML = `<tr><td colspan="8" class="text-center text-slate-500 py-6">Brak historii hostów.</td></tr>`; return; }
       $("hostRows").innerHTML = rows.map((h) => {
         const unstable = h.stability === "flaky" || h.stability === "inactive" || h.stability === "unreachable";
-        const slots = list(h.time_slots);
+        const slotsRaw = typeof h.time_slots === "string"
+        ? JSON.parse(h.time_slots)
+        : h.time_slots;
+      const slots = typeof slotsRaw === "object" && slotsRaw !== null
+        ? Object.entries(slotsRaw).filter(([, v]) => String(v).match(/^\d+$/))
+        : [];
+      const slotsStr =
+        slots.length > 0
+          ? slots
+              .map(([period, count]) => `${period}UTC: ${count}↑/${slots.length - count}↓`)
+              .join(" | ")
+          : "—";
         return `<tr style="${unstable?"background:rgba(120,53,15,.14)":""}">
           <td class="font-mono text-cyan-300">${esc(h.host)}</td>
           <td>${stabilityBadge(h.stability, h.confidence_pct)}</td>
@@ -1084,7 +1137,7 @@
           <td>${esc(num(h.missed_streak))}</td>
           <td class="text-slate-500">${esc(String(h.first_seen||"").slice(0,19))}</td>
           <td class="text-slate-500">${esc(String(h.last_seen||"").slice(0,19))}</td>
-          <td class="text-slate-500 text-[10px]" title="${esc(slots.join(" | "))}">${esc(slots.slice(-3).join(" · ") || "—")}</td>
+          <td class="text-slate-500 text-[10px]" title="${esc(slotsStr)}">${esc(slotsStr)}</td>
         </tr>`;
       }).join("");
     }
@@ -1217,6 +1270,31 @@
 
     function renderKpisEmpty() {
       $("kpiStrip").innerHTML = `<div class="card px-3 py-2.5"><div class="kpi-label">Exposure Score</div><div class="kpi-value">—</div></div>`;
+    }
+
+    function renderTechSummary(scan) {
+      scan = scan || STATE.scan;
+      if (!scan || !scan.assets) { $("techSummary").classList.add("hidden"); $("techTags").innerHTML = ""; return; }
+      var techCounts = {};
+      scan.assets.forEach(function(a) {
+        var techs = (a.http && a.http.technologies) || [];
+        techs.forEach(function(t) {
+          t = String(t);
+          techCounts[t] = (techCounts[t] || 0) + 1;
+        });
+        var ports = a.open_ports || [];
+        ports.forEach(function(p) {
+          var svc = p.service || "unknown";
+          techCounts["port-" + svc] = (techCounts["port-" + svc] || 0) + 1;
+        });
+      });
+      var items = Object.entries(techCounts).sort(function(a, b) { return b[1] - a[1]; }).slice(0, 12);
+      var tags = items.map(function(_ref) {
+        var tech = _ref[0], count = _ref[1];
+        return `<span class="chip" style="margin:.1rem .2rem;" onclick="filterByTech('${esc(tech)}')">${esc(tech)}: ${esc(count)}</span>`;
+      });
+      $("techTags").innerHTML = tags.join(" ");
+      $("techSummary").classList.toggle("hidden", tags.length === 0);
     }
   </script>
 </body>
