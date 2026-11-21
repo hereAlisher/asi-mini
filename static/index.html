@@ -1,0 +1,380 @@
+﻿<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ASI Mini — Attack Surface Intelligence</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/cytoscape@3.30.2/dist/cytoscape.min.js"></script>
+  <style>
+    body { background: #070b14; color: #e2e8f0; font-family: ui-sans-serif, system-ui, sans-serif; }
+    #cy { width: 100%; height: 470px; background: radial-gradient(circle at center, #0f172a 0%, #070b14 100%); }
+  </style>
+</head>
+<body class="min-h-screen p-4 md:p-6">
+  <div class="max-w-7xl mx-auto space-y-5">
+
+    <!-- Top Control Bar -->
+    <header class="flex flex-col xl:flex-row xl:items-center justify-between gap-4 bg-slate-900/80 border border-slate-800 rounded-xl p-4">
+      <div>
+        <div class="flex items-center gap-2">
+          <span class="h-2.5 w-2.5 rounded-full bg-cyan-400 animate-pulse"></span>
+          <h1 class="text-lg font-bold tracking-wide text-white">ASI MINI <span class="text-cyan-400 font-normal">// Attack Surface Intelligence</span></h1>
+        </div>
+        <p class="text-xs text-slate-400 mt-0.5">External passive recon + internal Nmap XML blind-spot mapping (CBI AGH)</p>
+      </div>
+
+      <div class="flex flex-wrap items-center gap-2">
+        <input id="domainInput" type="text" value="example.com" placeholder="Enter domain (e.g. agh.edu.pl)"
+          class="bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white w-48 focus:outline-none focus:border-cyan-400" />
+        <button onclick="runScan(false)"
+          class="bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-semibold text-sm px-3.5 py-2 rounded-lg transition">
+          Live Scan
+        </button>
+        <button onclick="runScan(true)"
+          class="bg-slate-800 hover:bg-slate-700 text-slate-100 border border-slate-700 text-sm px-3 py-2 rounded-lg transition">
+          Demo External
+        </button>
+        <button onclick="loadSampleNmap()"
+          class="bg-indigo-600/90 hover:bg-indigo-500 text-white text-sm px-3 py-2 rounded-lg transition">
+          Sample Internal Net
+        </button>
+        <label class="cursor-pointer bg-slate-800 hover:bg-slate-700 text-slate-100 border border-slate-700 text-sm px-3 py-2 rounded-lg transition">
+          Upload Nmap XML
+          <input id="nmapFile" type="file" accept=".xml" class="hidden" onchange="uploadNmap(event)" />
+        </label>
+        <button onclick="exportJson()"
+          class="bg-slate-900 hover:bg-slate-800 text-cyan-300 border border-cyan-500/40 text-sm px-3 py-2 rounded-lg transition">
+          Export JSON
+        </button>
+      </div>
+    </header>
+
+    <!-- Status Banner -->
+    <div id="statusBar" class="hidden text-sm px-4 py-2.5 rounded-lg bg-cyan-950/60 border border-cyan-700/50 text-cyan-200"></div>
+
+    <!-- KPI Strip -->
+    <section class="grid grid-cols-2 md:grid-cols-6 gap-3">
+      <div class="bg-slate-900/80 border border-slate-800 rounded-xl p-3.5">
+        <div class="text-xs text-slate-400 uppercase">Exposure Score</div>
+        <div class="flex items-baseline gap-2 mt-1">
+          <span id="kpiScore" class="text-2xl font-bold text-white">--</span>
+          <span id="kpiGrade" class="text-xs font-bold px-2 py-0.5 rounded bg-slate-800">--</span>
+        </div>
+      </div>
+      <div class="bg-slate-900/80 border border-slate-800 rounded-xl p-3.5">
+        <div class="text-xs text-slate-400 uppercase">Assets Found</div>
+        <div id="kpiAssets" class="text-2xl font-bold text-cyan-300 mt-1">--</div>
+      </div>
+      <div class="bg-slate-900/80 border border-red-900/50 rounded-xl p-3.5">
+        <div class="text-xs text-red-400 uppercase">Critical</div>
+        <div id="kpiCrit" class="text-2xl font-bold text-red-400 mt-1">--</div>
+      </div>
+      <div class="bg-slate-900/80 border border-orange-900/50 rounded-xl p-3.5">
+        <div class="text-xs text-orange-400 uppercase">High</div>
+        <div id="kpiHigh" class="text-2xl font-bold text-orange-400 mt-1">--</div>
+      </div>
+      <div class="bg-slate-900/80 border border-amber-900/50 rounded-xl p-3.5">
+        <div class="text-xs text-amber-300 uppercase">Medium</div>
+        <div id="kpiMed" class="text-2xl font-bold text-amber-300 mt-1">--</div>
+      </div>
+      <div class="bg-slate-900/80 border border-slate-800 rounded-xl p-3.5">
+        <div class="text-xs text-slate-400 uppercase">Low</div>
+        <div id="kpiLow" class="text-2xl font-bold text-slate-300 mt-1">--</div>
+      </div>
+    </section>
+
+    <!-- Main Grid: Graph + Findings -->
+    <section class="grid grid-cols-1 lg:grid-cols-12 gap-5">
+      <div class="lg:col-span-7 bg-slate-900/80 border border-slate-800 rounded-xl overflow-hidden flex flex-col">
+        <div class="flex items-center justify-between px-4 py-3 border-b border-slate-800">
+          <div>
+            <h2 class="text-sm font-semibold text-white">Attack-Path &amp; Exposure Graph</h2>
+            <p class="text-xs text-slate-400">Click any asset or finding node to filter blind spots</p>
+          </div>
+          <div class="flex items-center gap-2 text-xs">
+            <button onclick="resetFilter()" class="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200">Reset Filter</button>
+            <button onclick="cy && cy.fit(null, 24)" class="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200">Fit View</button>
+          </div>
+        </div>
+        <div id="cy"></div>
+        <div class="px-4 py-2 border-t border-slate-800 flex flex-wrap gap-4 text-xs text-slate-400">
+          <span><b class="text-red-400">●</b> Critical</span>
+          <span><b class="text-orange-400">●</b> High</span>
+          <span><b class="text-amber-300">●</b> Medium</span>
+          <span><b class="text-emerald-400">●</b> Low / Clean</span>
+          <span class="ml-auto" id="scanMeta">Mode: --</span>
+        </div>
+      </div>
+
+      <div class="lg:col-span-5 bg-slate-900/80 border border-slate-800 rounded-xl flex flex-col max-h-[560px]">
+        <div class="px-4 py-3 border-b border-slate-800 space-y-2">
+          <div class="flex items-center justify-between">
+            <h2 class="text-sm font-semibold text-white">Prioritized Blind Spots</h2>
+            <span id="filterLabel" class="text-xs text-cyan-400">All hosts</span>
+          </div>
+          <div class="flex flex-wrap gap-1.5 text-xs">
+            <button onclick="setSevFilter('ALL')" class="px-2.5 py-1 rounded bg-cyan-500/20 text-cyan-300 border border-cyan-500/40">ALL</button>
+            <button onclick="setSevFilter('CRITICAL')" class="px-2.5 py-1 rounded bg-slate-800 text-red-400">CRITICAL</button>
+            <button onclick="setSevFilter('HIGH')" class="px-2.5 py-1 rounded bg-slate-800 text-orange-400">HIGH</button>
+            <button onclick="setSevFilter('MEDIUM')" class="px-2.5 py-1 rounded bg-slate-800 text-amber-300">MEDIUM</button>
+            <button onclick="setSevFilter('LOW')" class="px-2.5 py-1 rounded bg-slate-800 text-slate-300">LOW</button>
+          </div>
+        </div>
+        <div id="findingsList" class="p-3 space-y-2.5 overflow-y-auto flex-1"></div>
+      </div>
+    </section>
+
+    <!-- Discovered Assets Table -->
+    <section class="bg-slate-900/80 border border-slate-800 rounded-xl overflow-hidden">
+      <div class="px-4 py-3 border-b border-slate-800 flex items-center justify-between">
+        <h2 class="text-sm font-semibold text-white">Discovered Infrastructure Inventory</h2>
+        <span id="dnsMeta" class="text-xs text-slate-400"></span>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="w-full text-left text-xs">
+          <thead class="bg-slate-950/70 text-slate-400 uppercase">
+            <tr>
+              <th class="px-4 py-2.5">Asset / Host</th>
+              <th class="px-4 py-2.5">IPs / CNAME</th>
+              <th class="px-4 py-2.5">Exposed Services / HTTP</th>
+              <th class="px-4 py-2.5">TLS / Source</th>
+              <th class="px-4 py-2.5">Risk Score</th>
+            </tr>
+          </thead>
+          <tbody id="assetsTable" class="divide-y divide-slate-800/80"></tbody>
+        </table>
+      </div>
+    </section>
+
+  </div>
+
+  <script>
+    let currentData = null;
+    let cy = null;
+    let sevFilter = "ALL";
+    let hostFilter = null;
+
+    const SEV_COLOR = { CRITICAL: "#ef4444", HIGH: "#f97316", MEDIUM: "#fbbf24", LOW: "#10b981" };
+    const SEV_BADGE = {
+      CRITICAL: "bg-red-500/20 text-red-300 border-red-500/40",
+      HIGH: "bg-orange-500/20 text-orange-300 border-orange-500/40",
+      MEDIUM: "bg-amber-500/20 text-amber-200 border-amber-500/40",
+      LOW: "bg-emerald-500/20 text-emerald-300 border-emerald-500/40",
+    };
+
+    const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+    function setStatus(msg) {
+      const el = document.getElementById("statusBar");
+      if (!msg) { el.classList.add("hidden"); return; }
+      el.textContent = msg;
+      el.classList.remove("hidden");
+    }
+
+    async function runScan(isDemo) {
+      const domain = isDemo ? "agh-infra.demo" : (document.getElementById("domainInput").value.trim() || "example.com");
+      setStatus(isDemo ? "Loading external demo dataset..." : `Running passive recon on ${domain} (crt.sh + DNS + TLS + HTTP)...`);
+      try {
+        const res = await fetch(`/api/scan?domain=${encodeURIComponent(domain)}&demo=${isDemo}`);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        currentData = await res.json();
+        hostFilter = null; sevFilter = "ALL";
+        renderAll(); setStatus(null);
+      } catch (err) {
+        setStatus(`Scan failed: ${err.message}.`);
+      }
+    }
+
+    async function loadSampleNmap() {
+      setStatus("Analyzing sample internal network (Nmap XML)...");
+      try {
+        const res = await fetch("/api/import", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ filename: "agh-internal-lab.xml", sample: true }),
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        currentData = await res.json();
+        hostFilter = null; sevFilter = "ALL";
+        renderAll(); setStatus(null);
+      } catch (err) {
+        setStatus(`Import failed: ${err.message}`);
+      }
+    }
+
+    async function uploadNmap(evt) {
+      const file = evt.target.files[0];
+      if (!file) return;
+      setStatus(`Parsing ${file.name}...`);
+      try {
+        const text = await file.text();
+        const res = await fetch("/api/import", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ filename: file.name, content: text, sample: false }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
+        currentData = data;
+        hostFilter = null; sevFilter = "ALL";
+        renderAll(); setStatus(null);
+      } catch (err) {
+        setStatus(`XML import failed: ${err.message}`);
+      } finally {
+        evt.target.value = "";
+      }
+    }
+
+    function renderAll() {
+      const s = currentData.summary;
+      document.getElementById("kpiScore").textContent = `${s.exposure_score}/100`;
+      const gradeEl = document.getElementById("kpiGrade");
+      gradeEl.textContent = `Grade ${s.grade}`;
+      gradeEl.className = `text-xs font-bold px-2 py-0.5 rounded border ${SEV_BADGE[s.risk_level]}`;
+      document.getElementById("kpiAssets").textContent = s.assets_discovered;
+      document.getElementById("kpiCrit").textContent = s.severity_counts.CRITICAL;
+      document.getElementById("kpiHigh").textContent = s.severity_counts.HIGH;
+      document.getElementById("kpiMed").textContent = s.severity_counts.MEDIUM;
+      document.getElementById("kpiLow").textContent = s.severity_counts.LOW;
+      document.getElementById("scanMeta").textContent = `Target: ${currentData.target} | Mode: ${currentData.mode.toUpperCase()}`;
+      const d = currentData.dns_root;
+      document.getElementById("dnsMeta").textContent = currentData.mode === "nmap_import"
+        ? "Source: Nmap XML Network Scan"
+        : `SPF: ${d.has_spf ? "OK" : "MISSING"}  |  DMARC: ${d.has_dmarc ? "OK" : "MISSING"}`;
+
+      renderGraph();
+      renderFindings();
+      renderAssets();
+    }
+
+    function renderGraph() {
+      if (cy) cy.destroy();
+      cy = cytoscape({
+        container: document.getElementById("cy"),
+        elements: [...currentData.graph.nodes, ...currentData.graph.edges],
+        style: [
+          {
+            selector: "node",
+            style: {
+              "label": "data(label)",
+              "color": "#e2e8f0",
+              "font-size": "10px",
+              "text-valign": "bottom",
+              "text-margin-y": "6px",
+              "text-wrap": "wrap",
+              "text-max-width": "125px",
+              "background-color": (ele) => SEV_COLOR[ele.data("severity")] || "#38bdf8",
+              "border-width": 2,
+              "border-color": "#0f172a",
+              "width": (ele) => ele.data("type") === "root" ? 42 : ele.data("type") === "host" ? 30 : 20,
+              "height": (ele) => ele.data("type") === "root" ? 42 : ele.data("type") === "host" ? 30 : 20,
+              "shape": (ele) => ele.data("type") === "finding" ? "diamond" : ele.data("type") === "external" ? "triangle" : "ellipse",
+            },
+          },
+          {
+            selector: "edge",
+            style: {
+              "width": 1.5,
+              "line-color": "#334155",
+              "target-arrow-color": "#475569",
+              "target-arrow-shape": "triangle",
+              "curve-style": "bezier",
+              "label": "data(label)",
+              "font-size": "8px",
+              "color": "#64748b",
+              "text-rotation": "autorotate",
+            },
+          },
+        ],
+        layout: { name: "cose", animate: false, padding: 28, nodeRepulsion: 9000 },
+      });
+
+      cy.on("tap", "node", (evt) => {
+        const d = evt.target.data();
+        if (d.type === "host" || d.type === "root") {
+          hostFilter = d.label;
+          renderFindings();
+        } else if (d.type === "finding") {
+          const f = currentData.findings.find((x) => x.id === d.finding_id);
+          if (f) { hostFilter = f.host; renderFindings(); }
+        }
+      });
+    }
+
+    function setSevFilter(sev) { sevFilter = sev; renderFindings(); }
+    function resetFilter() { hostFilter = null; sevFilter = "ALL"; renderFindings(); }
+
+    function renderFindings() {
+      document.getElementById("filterLabel").textContent = hostFilter ? `Host: ${hostFilter}` : `All hosts (${sevFilter})`;
+      const list = document.getElementById("findingsList");
+      const items = currentData.findings.filter((f) =>
+        (sevFilter === "ALL" || f.severity === sevFilter) &&
+        (!hostFilter || f.host === hostFilter)
+      );
+
+      if (!items.length) {
+        list.innerHTML = `<div class="text-xs text-slate-400 p-4 text-center">No blind spots match this filter.</div>`;
+        return;
+      }
+
+      list.innerHTML = items.map((f) => `
+        <div class="bg-slate-950/80 border border-slate-800 rounded-lg p-3 space-y-1.5 hover:border-slate-700">
+          <div class="flex items-center justify-between gap-2">
+            <span class="text-[11px] font-bold px-2 py-0.5 rounded border ${SEV_BADGE[f.severity]}">${esc(f.severity)}</span>
+            <span class="text-[11px] text-slate-400 font-mono">${esc(f.id)} · ${esc(f.host)}</span>
+          </div>
+          <div class="text-sm font-semibold text-white">${esc(f.title)}</div>
+          <div class="text-xs text-slate-300"><span class="text-slate-500">Evidence:</span> ${esc(f.evidence)}</div>
+          <div class="text-xs text-amber-200/90"><span class="text-slate-500">Vector:</span> ${esc(f.attack_vector)}</div>
+          <div class="text-xs text-emerald-300/95 bg-emerald-950/30 border border-emerald-900/40 rounded px-2 py-1.5">
+            <span class="font-semibold">Fix:</span> ${esc(f.remediation)}
+          </div>
+        </div>
+      `).join("");
+    }
+
+    function renderAssets() {
+      const tbody = document.getElementById("assetsTable");
+      tbody.innerHTML = currentData.subdomains.map((sub) => {
+        const sc = currentData.host_scores[sub.host] ?? 0;
+        const sev = sc >= 60 ? "CRITICAL" : sc >= 35 ? "HIGH" : sc >= 15 ? "MEDIUM" : "LOW";
+        const net = sub.ips.length ? sub.ips.join(", ") : (sub.cnames.length ? `CNAME -> ${sub.cnames.join(", ")}` : "Unresolved");
+        const ports = sub.open_ports || [];
+        const svc = ports.length
+          ? ports.map((p) => `<span class="inline-block mr-1 mb-0.5 px-1.5 py-0.5 rounded bg-slate-800 text-cyan-300 font-mono">${esc(p.port)}/${esc(p.service)}</span>`).join("")
+          : (sub.http.reachable
+            ? `<span class="text-cyan-300">HTTP ${esc(sub.http.status)}</span> ${esc(sub.http.server)} ${esc(sub.http.x_powered_by)}`
+            : `<span class="text-slate-500">Unreachable</span>`);
+        const tls = sub.tls.error === "nmap_import"
+          ? `<span class="text-indigo-300">Nmap XML</span>`
+          : sub.tls.valid === true
+          ? `<span class="${sub.tls.days_remaining <= 14 ? 'text-orange-400 font-semibold' : 'text-emerald-400'}">Valid (${sub.tls.days_remaining}d)</span>`
+          : sub.tls.valid === false
+          ? `<span class="text-red-400 font-semibold">INVALID (${esc(sub.tls.error)})</span>`
+          : `<span class="text-slate-500">No TLS</span>`;
+        return `
+          <tr class="hover:bg-slate-800/40 cursor-pointer" onclick="hostFilter='${esc(sub.host)}'; renderFindings();">
+            <td class="px-4 py-2.5 font-mono text-white">${esc(sub.host)}</td>
+            <td class="px-4 py-2.5 font-mono text-slate-300">${esc(net)}</td>
+            <td class="px-4 py-2.5 text-slate-300">${svc}</td>
+            <td class="px-4 py-2.5">${tls}</td>
+            <td class="px-4 py-2.5"><span class="px-2 py-0.5 rounded border font-semibold ${SEV_BADGE[sev]}">${sc}</span></td>
+          </tr>
+        `;
+      }).join("");
+    }
+
+    function exportJson() {
+      if (!currentData) return;
+      const blob = new Blob([JSON.stringify(currentData, null, 2)], { type: "application/json" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = `asi-report-${currentData.target}.json`;
+      a.click();
+    }
+
+    window.addEventListener("DOMContentLoaded", () => runScan(true));
+  </script>
+</body>
+</html>
