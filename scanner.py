@@ -192,6 +192,10 @@ def _entry_for(item: str) -> dict | None:
     item = item.strip()
     if not item:
         return None
+    # Handle http(s)://host:port/ — strip scheme and path, keep host:port
+    url_match = re.match(r"^https?://([^/]+)", item)
+    if url_match:
+        item = url_match.group(1)
     if "/" in item:
         try:
             net = ipaddress.ip_network(item, strict=False)
@@ -215,6 +219,13 @@ def _entry_for(item: str) -> dict | None:
             a = b = None
         if a is not None and b is not None and b >= a:
             return {"kind": "range", "raw": item, "value": item, "start": a, "count": b - a + 1}
+    # Handle host:port (IPv4 or domain) — not IPv6
+    port_match = re.match(r"^(\d{1,3}(?:\.\d{1,3}){3}):(\d+)$", item)
+    if port_match:
+        return {"kind": "hostport", "raw": item, "value": item, "start": 0, "count": 1}
+    domain_port_match = re.match(r"^([a-zA-Z0-9](?:[a-zA-Z0-9.-]*[a-zA-Z0-9])?):(\d+)$", item)
+    if domain_port_match and not item.startswith("["):
+        return {"kind": "hostport", "raw": item, "value": item, "start": 0, "count": 1}
     try:
         ip = ipaddress.ip_address(item)
         return {"kind": "ip", "raw": item, "value": str(ip), "start": int(ip), "count": 1}
@@ -512,13 +523,21 @@ async def _fetch_paths(client: Any, base: str, paths: Iterable[str]) -> dict:
     return out
 
 
-async def fingerprint_http(host: str, client: Any, signature_paths: Iterable[str] | None = None) -> dict:
+async def fingerprint_http(host: str, client: Any, signature_paths: Iterable[str] | None = None,
+                           port: int | None = None) -> dict:
     result = _default_http()
     if client is None:
         return result
-    for scheme in ("https", "http"):
+    # Build target host:port string for non-standard ports
+    if port is not None and port not in (80, 443):
+        target = f"{host}:{port}"
+        schemes = ("http", "https")  # try HTTP first for non-standard ports
+    else:
+        target = host
+        schemes = ("https", "http")
+    for scheme in schemes:
         try:
-            r = await client.get(f"{scheme}://{host}/", timeout=6.0)
+            r = await client.get(f"{scheme}://{target}/", timeout=6.0)
         except Exception:
             continue
         text = r.text[:200000] if r.text else ""
@@ -528,7 +547,7 @@ async def fingerprint_http(host: str, client: Any, signature_paths: Iterable[str
             name = raw_cookie.split("=", 1)[0].strip()
             if name and name not in cookies:
                 cookies.append(name)
-        base = f"{scheme}://{host}"
+        base = f"{scheme}://{target}"
         result.update({
             "reachable": True,
             "url": str(r.url),
@@ -735,32 +754,77 @@ def _parse_dt(value: Any) -> datetime | None:
 def _is_reachable(asset: dict) -> bool:
     http = asset.get("http") or {}
     tls = asset.get("tls") or {}
+    status = http.get("status")
+    if status is not None:
+        try:
+            if int(status) >= 500:
+                return False
+        except (TypeError, ValueError):
+            pass
     return bool(http.get("reachable") or asset.get("open_ports") or tls.get("valid") is True)
 
 
 async def _scan_one(host: str, sem: asyncio.Semaphore, client: Any, *, scan_ports: bool,
                     ports: list[int], signatures: list[dict], nmap_ports: list[dict] | None,
-                    is_flaky: bool = False) -> dict:
+                    is_flaky: bool = False) -> list[dict]:
     async with sem:
+        # Handle host:port targets (e.g. "127.0.0.1:9001" or "example.com:8080")
+        port_override: int | None = None
+        if ":" in host and not host.startswith("["):
+            try:
+                ipaddress.ip_address(host)
+            except ValueError:
+                parts = host.rsplit(":", 1)
+                if len(parts) == 2 and parts[1].isdigit():
+                    host = parts[0]
+                    port_override = int(parts[1])
+
         a_records, cnames = await asyncio.gather(
             asyncio.to_thread(_resolve_records, host, "A"),
             asyncio.to_thread(_resolve_records, host, "CNAME"),
         )
         signature_paths = [s.get("path") for s in signatures
                            if str(s.get("match_type", "")).lower() == "path" and s.get("path")]
-        tls, http = await asyncio.gather(
-            asyncio.to_thread(inspect_tls, host),
-            fingerprint_http(host, client, signature_paths),
-        )
+        tls = await asyncio.to_thread(inspect_tls, host)
+
+        # Determine which ports to TCP-check
+        if port_override is not None:
+            check_ports = [port_override]
+        else:
+            check_ports = ports
+
         if nmap_ports is not None:
             open_ports = list(nmap_ports)
-        elif scan_ports:
+        elif scan_ports or port_override is not None:
             target = a_records[0] if a_records else host
-            open_ports = await tcp_port_check(target, ports)
+            open_ports = await tcp_port_check(target, check_ports)
         else:
             open_ports = []
+
+        # --- Multi-port HTTP fingerprinting ---
+        # Try default HTTP fingerprinting first (ports 80/443)
+        http = await fingerprint_http(host, client, signature_paths)
+
+        # For each discovered open non-standard port, fingerprint HTTP
+        port_fingerprints: dict[int, dict] = {}
+        non_standard_open = [p for p in open_ports
+                             if (p.get("port") if isinstance(p, dict) else p) not in (80, 443)]
+        for p in non_standard_open:
+            port_num = p.get("port") if isinstance(p, dict) else p
+            if port_num in port_fingerprints:
+                continue
+            pf = await fingerprint_http(host, client, signature_paths, port=port_num)
+            if pf.get("reachable"):
+                port_fingerprints[port_num] = pf
+
+        # If default HTTP didn't connect but a non-standard port did, use the first as primary
+        if not http.get("reachable") and port_fingerprints:
+            http = next(iter(port_fingerprints.values()))
+
         http["technologies"] = detect_technologies(http, open_ports)
-        asset = {
+
+        # Build the base host asset
+        base_asset = {
             "host": host,
             "ips": a_records,
             "cnames": cnames,
@@ -770,37 +834,57 @@ async def _scan_one(host: str, sem: asyncio.Semaphore, client: Any, *, scan_port
             "open_ports": open_ports,
             "sources": ["live_dns"] + (["nmap"] if nmap_ports is not None else (["tcp"] if scan_ports else [])),
         }
-        asset["http"]["matched_signatures"] = evaluate_signatures(asset, signatures)
+        base_asset["http"]["matched_signatures"] = evaluate_signatures(base_asset, signatures)
 
-        # Flaky-host auto-retry: if a previously-flaky host fails the first probe,
-        # perform 1 confirmation retry after a short delay before marking unreachable.
-        if is_flaky and not _is_reachable(asset) and not asset.get("retried"):
+        assets: list[dict] = [base_asset]
+
+        # Create per-port assets for each HTTP-responding non-standard port
+        for port_num, pf in port_fingerprints.items():
+            port_open = next((p for p in open_ports
+                              if (p.get("port") if isinstance(p, dict) else p) == port_num), None)
+            if port_open is None:
+                port_open = {"port": port_num, "protocol": "tcp",
+                             "service": SERVICE_NAMES.get(port_num, "unknown"),
+                             "product": "", "version": ""}
+            pf_copy = dict(pf)
+            pf_copy["technologies"] = detect_technologies(pf_copy, [port_open])
+            port_asset = {
+                "host": f"{host}:{port_num}",
+                "ips": a_records,
+                "cnames": cnames,
+                "mx": [],
+                "tls": _default_tls(),
+                "http": pf_copy,
+                "open_ports": [port_open],
+                "sources": ["live_dns", "tcp"],
+            }
+            port_asset["http"]["matched_signatures"] = evaluate_signatures(port_asset, signatures)
+            assets.append(port_asset)
+
+        # Flaky-host auto-retry on the base asset
+        if is_flaky and not _is_reachable(base_asset) and not base_asset.get("retried"):
             await asyncio.sleep(0.3)
-            tls2, http2 = await asyncio.gather(
-                asyncio.to_thread(inspect_tls, host),
-                fingerprint_http(host, client, signature_paths),
-            )
-            if scan_ports and nmap_ports is None:
-                target = a_records[0] if a_records else host
-                open_ports2 = await tcp_port_check(target, ports)
-            else:
-                open_ports2 = open_ports if nmap_ports is not None else []
-            http2["technologies"] = detect_technologies(http2, open_ports2)
+            tls2 = await asyncio.to_thread(inspect_tls, host)
+            http2 = await fingerprint_http(host, client, signature_paths)
+            if not http2.get("reachable") and port_fingerprints:
+                http2 = next(iter(port_fingerprints.values()))
+            http2["technologies"] = detect_technologies(http2, open_ports)
             http2["matched_signatures"] = evaluate_signatures({
-                "host": host, "http": http2, "open_ports": open_ports2,
+                "host": host, "http": http2, "open_ports": open_ports,
             }, signatures)
-            asset = {
+            assets[0] = {
                 "host": host,
                 "ips": a_records,
                 "cnames": cnames,
                 "mx": [],
                 "tls": tls2,
                 "http": http2,
-                "open_ports": open_ports2,
+                "open_ports": open_ports,
                 "sources": ["live_dns"] + (["nmap"] if nmap_ports is not None else (["tcp"] if scan_ports else [])),
                 "retried": True,
             }
-        return asset
+
+        return assets
 
 
 async def scan_targets(
@@ -897,6 +981,8 @@ async def scan_targets(
             assets.append({"host": host, "ips": [], "cnames": [], "mx": [], "tls": _default_tls(),
                            "http": _default_http(), "open_ports": [], "sources": ["live_dns"],
                            "error": str(result)})
+        elif isinstance(result, list):
+            assets.extend(result)
         else:
             assets.append(result)
 

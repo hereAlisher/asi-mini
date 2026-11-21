@@ -187,6 +187,14 @@ def _apply_override(target: dict, override: dict, *, kind: str) -> None:
 def _asset_reachable(asset: dict) -> bool:
     http = asset.get("http") or {}
     tls = asset.get("tls") or {}
+    status = http.get("status")
+    # Treat 5xx HTTP as unreachable for stability (service is failing)
+    if status is not None:
+        try:
+            if int(status) >= 500:
+                return False
+        except (TypeError, ValueError):
+            pass
     return bool(http.get("reachable") or asset.get("open_ports") or tls.get("valid") is True)
 
 
