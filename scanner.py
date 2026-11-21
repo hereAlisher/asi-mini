@@ -241,13 +241,20 @@ def parse_targets(raw_targets: Any) -> tuple[list[dict], int]:
     return entries, sum(int(e["count"]) for e in entries)
 
 
-def plan_targets(raw_targets: Any, rate_limit_rps: float = 5.0, window_minutes: float = 60.0) -> dict:
+def plan_targets(raw_targets: Any, rate_limit_rps: float = 5.0, window_minutes: float = 60.0,
+                 measured_host_sec: float | None = None) -> dict:
     entries, total = parse_targets(raw_targets)
     rps = max(float(rate_limit_rps or 5.0), 0.1)
     window_sec = max(float(window_minutes or 60.0), 1.0) * 60.0
-    estimated = round(total / rps, 2) if total else 0.0
-    window_capacity = max(1, int(rps * window_sec))
-    optimal_chunk = min(window_capacity, 5000, max(total, 1))
+    # Use measured speed to adapt chunk size if provided
+    if measured_host_sec and measured_host_sec > 0:
+        hosts_per_window = int(window_sec / measured_host_sec)
+        optimal_chunk = min(hosts_per_window, 5000, max(total, 1))
+        estimated = round(total * measured_host_sec, 2)
+    else:
+        estimated = round(total / rps, 2) if total else 0.0
+        window_capacity = max(1, int(rps * window_sec))
+        optimal_chunk = min(window_capacity, 5000, max(total, 1))
     if total <= 0:
         optimal_chunk = 0
     total_chunks = math.ceil(total / optimal_chunk) if optimal_chunk else 0
@@ -265,13 +272,14 @@ def plan_targets(raw_targets: Any, rate_limit_rps: float = 5.0, window_minutes: 
         "supports_10k_scale": bool(total >= 10000),
         "rate_limit_rps": rps,
         "window_minutes": round(window_sec / 60.0, 2),
-        "window_capacity": int(window_capacity),
+        "window_capacity": int(window_sec / rps) if not (measured_host_sec and measured_host_sec > 0) else int(window_sec / measured_host_sec),
         "target_entries": len(entries),
         "target_types": kinds,
         "memory_safe": True,
         "expansion_strategy": "lazy_cidr_arithmetic",
         "sample_targets": sample,
         "eta_human": _human_duration(estimated),
+        "adaptive": bool(measured_host_sec and measured_host_sec > 0),
     }
 
 
@@ -379,7 +387,7 @@ def _default_http() -> dict:
         "reachable": False, "url": None, "scheme": None, "status": None, "title": None,
         "server": None, "x_powered_by": None, "headers": {}, "cookies": [], "redirects": [],
         "favicon_hash": None, "technologies": [], "missing_headers": [], "paths": {},
-        "body_snippet": "", "matched_signatures": [],
+        "body_snippet": "", "matched_signatures": [], "footer_version": None,
     }
 
 
@@ -427,6 +435,10 @@ def inspect_tls(host: str, port: int = 443, timeout: float = 3.0) -> dict:
 
 
 _TITLE_RE = re.compile(r"<title[^>]*>(.*?)</title>", re.I | re.S)
+_FOOTER_RE = re.compile(r"<footer[^>]*>(.*?)</footer>", re.I | re.S)
+_VERSION_RE = re.compile(
+    r"(?:powered by|version|ver\.?|v\.?)\s*([\w.\-]*?[\d]+[\w.\-]*)", re.I
+)
 
 
 def _extract_title(html: str) -> str | None:
@@ -435,6 +447,20 @@ def _extract_title(html: str) -> str | None:
         return None
     title = re.sub(r"\s+", " ", match.group(1)).strip()
     return title[:200] or None
+
+
+def _extract_footer_version(html: str) -> str | None:
+    """Safely extract a version string from <footer> content."""
+    m = _FOOTER_RE.search(html or "")
+    if not m:
+        return None
+    footer_text = re.sub(r"\s+", " ", m.group(1)).strip()
+    vm = _VERSION_RE.search(footer_text)
+    if vm:
+        return vm.group(1).strip()[:80]
+    # Fallback: look for any version-like token in footer
+    tok = re.search(r"\bv?\d+\.\d+(?:\.\d+)?\b", footer_text)
+    return tok.group(0)[:80] if tok else None
 
 
 def _regex_match(pattern: str | None, text: str) -> bool:
@@ -509,6 +535,7 @@ async def fingerprint_http(host: str, client: Any, signature_paths: Iterable[str
             "scheme": scheme,
             "status": r.status_code,
             "title": _extract_title(text),
+            "footer_version": _extract_footer_version(text),
             "server": headers.get("server"),
             "x_powered_by": headers.get("x-powered-by"),
             "headers": headers,
@@ -528,11 +555,12 @@ def detect_technologies(http: dict, open_ports: list[dict] | None = None) -> lis
     server = (http.get("server") or "").lower()
     powered = (http.get("x_powered_by") or "").lower()
     body = (http.get("body_snippet") or "").lower()
+    footer = (http.get("footer_version") or "").lower()
     headers = http.get("headers") or {}
     cookies = [str(c).lower() for c in (http.get("cookies") or [])]
-    if "wp-content" in body or "wp-includes" in body or "wordpress" in body:
+    if "wp-content" in body or "wp-includes" in body or "wordpress" in body or "wordpress" in footer:
         tech.add("WordPress")
-    if "drupal" in body:
+    if "drupal" in body or "drupal" in footer:
         tech.add("Drupal")
     if "joomla" in body:
         tech.add("Joomla")
@@ -554,7 +582,7 @@ def detect_technologies(http: dict, open_ports: list[dict] | None = None) -> lis
             tech.add(label)
     iot_markers = ("cisco", "asa", "hikvision", "dahua", "mikrotik", "routeros", "axis",
                    "ubiquiti", "tp-link", "tplink", "ipcam", "webcam", "printer", "camera")
-    if any(marker in server or marker in body for marker in iot_markers):
+    if any(marker in server or marker in body or marker in footer for marker in iot_markers):
         tech.add("IoT")
     if "cisco" in server:
         tech.add("Cisco ASA")
@@ -594,6 +622,7 @@ def evaluate_signatures(asset: dict, signatures: list[dict] | None = None) -> li
                 matched, evidence = True, f"Cookies: {names}"
         elif match_type == "html":
             haystack = " ".join([http.get("body_snippet") or "", http.get("title") or "",
+                                 http.get("footer_version") or "",
                                  " ".join(http.get("technologies") or [])])
             if _regex_match(sig.get("match_value"), haystack):
                 matched, evidence = True, f"HTML pattern '{sig.get('match_value')}' matched on {host}"
@@ -1155,7 +1184,7 @@ def _demo_tls(valid: bool | None, days: int | None, issuer: str | None, error: s
 def _demo_http(host: str, *, reachable: bool = True, scheme: str = "https", status: int = 200,
                title: str = "", server: str | None = None, powered: str | None = None,
                cookies: list[str] | None = None, body: str = "", paths: dict | None = None,
-               missing: list[str] | None = None) -> dict:
+               missing: list[str] | None = None, footer_version: str | None = None) -> dict:
     http = _default_http()
     if not reachable:
         return http
@@ -1173,6 +1202,7 @@ def _demo_http(host: str, *, reachable: bool = True, scheme: str = "https", stat
         "title": title or None, "server": server, "x_powered_by": powered, "headers": headers,
         "cookies": cookies or [], "redirects": [], "favicon_hash": hashlib.sha256(host.encode()).hexdigest()[:16],
         "missing_headers": missing, "paths": paths or {}, "body_snippet": body,
+        "footer_version": footer_version,
     })
     return http
 
@@ -1209,7 +1239,8 @@ def get_demo_scan(raw_domain: str = "agh-infra.demo", variant: int = 1,
             tls=_demo_tls(True, 5, "Let's Encrypt"),
             http=_demo_http(f"admin.{d}", title="Administration Console", server="Apache/2.4.49 (Unix)",
                             powered="PHP/7.4.3", cookies=["PHPSESSID"],
-                            paths={"/admin": {"status": 200}, "/login": {"status": 200}}),
+                            paths={"/admin": {"status": 200}, "/login": {"status": 200}},
+                            footer_version="Apache/2.4.49"),
         ),
         _demo_asset(
             f"dev-api.{d}", ips=["149.156.10.45"],
@@ -1257,6 +1288,7 @@ def get_demo_scan(raw_domain: str = "agh-infra.demo", variant: int = 1,
                 cookies=["PHPSESSID"], body="<html><link href='/wp-content/themes/shop.css'>WordPress</html>",
                 paths={"/admin": {"status": 200}, "/login": {"status": 200}},
                 missing=["content-security-policy", "x-frame-options"],
+                footer_version="WordPress 6.4.2",
             ),
             open_ports=[{"port": 6379, "protocol": "tcp", "service": "redis",
                          "product": "Redis key-value store", "version": "6.2.6"}],

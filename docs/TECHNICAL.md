@@ -227,4 +227,16 @@ All **24** smoke checks pass (imports, users/roles, signatures CRUD, scan jobs, 
 - [ ] `README.md` updated with 1‑command Docker launch + link to `docs/TECHNICAL.md`
 - [ ] All `py_compile` checks pass
 - [ ] TestClient suite: 24/24 PASS (old) + new job checks
-- [ ] Frontend: every `fetch()` call uses `X‑Auth‑Token`; no hardcoded admin fallback
+- [ ] Frontend: every `fetch()` call uses `X-Auth-Token`; no hardcoded admin fallback
+
+### 4.4 Lab Target Simulator
+
+For live jury demos, a stdlib-only `lab_sim.py` launches 3 local HTTP servers:
+
+| Port | Service | Purpose |
+|------|---------|---------|
+| 9001 | LabCMS (WordPress) | CMS fingerprint, PHPSESSID cookie, /admin 200, footer version |
+| 9002 | Staging API (Werkzeug) | Staging hostname detection, /version endpoint |
+| 9003 | Flaky IoT (Cisco-ASA) | Alternates 200/503 to prove flaky-host detection |
+
+Run: `.\.venv\Scripts\python.exe lab_sim.py`

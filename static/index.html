@@ -55,12 +55,18 @@
     th { font-size:.64rem; text-transform:uppercase; letter-spacing:.07em; color:#7c8ba1; text-align:left; padding:.55rem .65rem; border-bottom:1px solid #1e293b; white-space:nowrap; }
     td { font-size:.73rem; padding:.55rem .65rem; border-bottom:1px solid rgba(30,41,59,.55); vertical-align:top; }
     tr:hover td { background:rgba(30,41,59,.35); }
-    .chip { border:1px solid #334155; background:#0f172a; border-radius:999px; padding:.1rem .45rem; font-size:.62rem; color:#cbd5e1; }
+    .chip { border:1px solid #334155; background:#0f172a; border-radius:999px; padding:.1rem .45rem; font-size:.62rem; color:#cbd5e1; cursor:pointer; }
+    .chip:hover { border-color:#22d3ee; color:#67e8f9; }
+    .chip.selected { border-color:#22d3ee; background:rgba(8,145,178,.15); color:#67e8f9; }
     .kpi-value { font-size:1.4rem; font-weight:800; color:#f8fafc; line-height:1.1; }
     .kpi-label { font-size:.62rem; text-transform:uppercase; letter-spacing:.08em; color:#7c8ba1; font-weight:700; }
     .fade-in { animation: fade .18s ease-out; }
     @keyframes fade { from { opacity:0; transform:translateY(3px);} to {opacity:1; transform:none;} }
     .hidden { display:none !important; }
+    .p1-badge { background:#450a0a;color:#fecaca;border-color:#b91c1c; }
+    .p2-badge { background:#431407;color:#fed7aa;border-color:#c2410c; }
+    .p3-badge { background:#422006;color:#fde68a;border-color:#a16207; }
+    .p4-badge { background:#052e16;color:#bbf7d0;border-color:#15803d; }
   </style>
 </head>
 <body class="min-h-screen p-3 md:p-5">
@@ -78,7 +84,7 @@
         </div>
       </div>
       <div class="flex items-center gap-2 flex-wrap">
-        <span id="encBadge" class="badge" style="background:#052e16;color:#86efac;border-color:#166534">🔒 Fernet AES · Encryption At Rest</span>
+        <span id="encBadge" class="badge" style="background:#052e16;color:#86efac;border-color:#166534;cursor:pointer" onclick="openEncProof()">🔒 Fernet AES · Encryption At Rest</span>
         <span id="authState" class="badge" style="background:#0f172a;color:#94a3b8;border-color:#334155">Niezalogowany</span>
         <button id="authBtn" class="btn btn-primary" onclick="toggleAuth()">Zaloguj</button>
       </div>
@@ -130,8 +136,15 @@
             </div>
             <span id="panelCount" class="text-[11px] text-slate-500"></span>
           </div>
-          <div id="findingsPanel" class="card-b space-y-2 overflow-y-auto scroll-thin" style="max-height:560px"></div>
-          <div id="chainsPanel" class="card-b space-y-2 overflow-y-auto scroll-thin hidden" style="max-height:560px"></div>
+          <!-- Findings toolbar -->
+          <div id="findingsToolbar" class="px-3 py-1.5 border-b border-slate-800 flex flex-wrap items-center gap-2 text-[10px]">
+            <label class="flex items-center gap-1 cursor-pointer"><input type="checkbox" id="selAllCh" class="accent-cyan-400"> Select All</label>
+            <span id="selCount" class="text-slate-400">Selected: 0</span>
+            <button class="btn btn-ghost" data-perm="modify" onclick="exportSelectedDojo()">🚀 Export Selected</button>
+            <label class="flex items-center gap-1 cursor-pointer"><input type="checkbox" id="evidenceToggle" class="accent-cyan-400"> As Info/Evidence</label>
+          </div>
+          <div id="findingsPanel" class="card-b space-y-2 overflow-y-auto scroll-thin" style="max-height:500px"></div>
+          <div id="chainsPanel" class="card-b space-y-2 overflow-y-auto scroll-thin hidden" style="max-height:500px"></div>
         </div>
       </div>
 
@@ -141,15 +154,15 @@
           <span id="assetCount" class="text-[11px] text-slate-500"></span>
         </div>
         <div id="techSummary" class="card-b space-y-2 hidden">
-          <p class="text-[10px] text-slate-400 font-semibold uppercase tracking-wider mb-1">Technologies / Services</p>
-          <div class="grid grid-cols-2 md:grid-cols-4 gap-1" id="techTags"></div>
+          <p class="text-[10px] text-slate-400 font-semibold uppercase tracking-wider mb-1">Grouped Services / Technologies</p>
+          <div class="flex flex-wrap gap-1" id="techTags"></div>
         </div>
         <div class="overflow-auto scroll-thin" style="max-height:440px">
           <table class="w-full">
             <thead>
               <tr>
                 <th>Host</th><th>IPs / CNAME</th><th>Exposed Ports / Services</th>
-                <th>HTTP Fingerprint</th><th>Stability</th><th>Risk</th><th></th>
+                <th>HTTP Fingerprint</th><th>Stability</th><th>Risk</th><th>Priority</th><th></th>
               </tr>
             </thead>
             <tbody id="assetRows"></tbody>
@@ -195,7 +208,10 @@
           <div class="card mt-3" data-perm="add,modify,delete">
             <div class="card-h">
               <h2 class="text-sm font-bold text-white">Cyclic Scheduled Jobs</h2>
-              <span class="badge" style="background:#052e16;color:#86efac;border-color:#166534">auto-run</span>
+              <div class="flex gap-1.5">
+                <button class="btn btn-ghost" data-perm="add" onclick="saveAsJob()">💾 Save as Recurring Job</button>
+                <span class="badge" style="background:#052e16;color:#86efac;border-color:#166534">auto-run</span>
+              </div>
             </div>
             <div class="card-b space-y-2" id="jobsPanel">
               <p class="text-[11px] text-slate-500">No active jobs.</p>
@@ -244,6 +260,13 @@
       </div>
 
       <div class="card overflow-hidden">
+        <div class="card-h"><h2 class="text-sm font-bold text-white">Timeline Trend Chart</h2><button class="btn btn-ghost" onclick="loadTimeline()">↻ Refresh</button></div>
+        <div class="card-b">
+          <div id="timelineChart" style="width:100%;height:220px"></div>
+        </div>
+      </div>
+
+      <div class="card overflow-hidden">
         <div class="card-h"><h2 class="text-sm font-bold text-white">Compare Two Scans</h2><span class="badge" style="background:#0c4a6e;color:#bae6fd;border-color:#0369a1">scan-to-scan drift</span></div>
         <div class="card-b space-y-3">
           <div class="flex flex-wrap items-end gap-2">
@@ -269,7 +292,15 @@
     <!-- ======================= TAB 4: SIGNATURES & RBAC ======================= -->
     <section id="tab-admin" class="hidden grid xl:grid-cols-2 gap-4" data-perm="manage_users">
       <div class="card overflow-hidden">
-        <div class="card-h"><h2 class="text-sm font-bold text-white">Safe Custom Signatures</h2><span class="badge" style="background:#052e16;color:#86efac;border-color:#166534">read-only GET only</span></div>
+        <div class="card-h">
+          <h2 class="text-sm font-bold text-white">Safe Custom Signatures</h2>
+          <div class="flex gap-1.5">
+            <button class="btn btn-ghost" data-perm="read" onclick="exportSignatures()">⬇ Export JSON</button>
+            <button class="btn btn-ghost" data-perm="add" onclick="$('sigImportFile').click()">⬆ Import JSON</button>
+            <input id="sigImportFile" type="file" accept=".json" class="hidden" onchange="importSignatures(event)">
+            <span class="badge" style="background:#052e16;color:#86efac;border-color:#166534">read-only GET only</span>
+          </div>
+        </div>
         <div class="card-b space-y-3">
           <div class="overflow-auto scroll-thin" style="max-height:300px">
             <table class="w-full">
@@ -410,6 +441,70 @@
     </div>
   </div>
 
+  <!-- Encryption Proof Modal -->
+  <div id="encProofModal" class="modal hidden">
+    <div class="modal-box" style="max-width:720px">
+      <div class="px-5 py-4 border-b border-slate-800 flex items-center justify-between">
+        <div>
+          <h2 class="text-base font-bold text-white">🔒 Encryption At Rest — Proof Inspector</h2>
+          <p class="text-[11px] text-slate-400">Raw SQLite ciphertext vs decrypted output (admin only).</p>
+        </div>
+        <button class="btn btn-ghost" onclick="closeModal('encProofModal')">✕</button>
+      </div>
+      <div class="p-5 space-y-3 overflow-y-auto scroll-thin" id="encProofBody" style="max-height:500px">
+        <p class="text-xs text-slate-400">Loading proof...</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Job edit modal -->
+  <div id="jobEditModal" class="modal hidden">
+    <div class="modal-box">
+      <div class="px-5 py-4 border-b border-slate-800 flex items-center justify-between">
+        <h2 class="text-base font-bold text-white">Edit Recurring Job</h2>
+        <button class="btn btn-ghost" onclick="closeModal('jobEditModal')">✕</button>
+      </div>
+      <div class="p-5 space-y-3">
+        <input id="jobEditId" type="hidden">
+        <div><label class="label" for="jobEditName">Job Name</label><input id="jobEditName" class="input"></div>
+        <div class="grid grid-cols-2 gap-2">
+          <div><label class="label" for="jobEditInterval">Interval (min)</label><input id="jobEditInterval" class="input" type="number" min="1"></div>
+          <div><label class="label" for="jobEditRate">Rate Limit (rps)</label><input id="jobEditRate" class="input" type="number" min="0.1" step="0.1"></div>
+        </div>
+        <div><label class="label" for="jobEditWindowStart">Window Start</label><input id="jobEditWindowStart" class="input"></div>
+        <div><label class="label" for="jobEditWindowEnd">Window End</label><input id="jobEditWindowEnd" class="input"></div>
+        <div class="flex justify-end gap-2 pt-1">
+          <button type="button" class="btn btn-ghost" onclick="closeModal('jobEditModal')">Anuluj</button>
+          <button class="btn btn-primary" type="submit" onclick="saveJobEdit()">💾 Save Changes</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Signature edit modal -->
+  <div id="sigEditModal" class="modal hidden">
+    <div class="modal-box">
+      <div class="px-5 py-4 border-b border-slate-800 flex items-center justify-between">
+        <h2 class="text-base font-bold text-white">Edit Signature</h2>
+        <button class="btn btn-ghost" onclick="closeModal('sigEditModal')">✕</button>
+      </div>
+      <div class="p-5 space-y-3">
+        <input id="sigEditId" type="hidden">
+        <div><label class="label" for="sigEditName">Name</label><input id="sigEditName" class="input"></div>
+        <div><label class="label" for="sigEditSeverity">Severity</label>
+          <select id="sigEditSeverity" class="input"><option>LOW</option><option>MEDIUM</option><option>HIGH</option><option>CRITICAL</option></select>
+        </div>
+        <div><label class="label" for="sigEditValue">Match Value</label><input id="sigEditValue" class="input"></div>
+        <div><label class="label" for="sigEditDesc">Description</label><input id="sigEditDesc" class="input"></div>
+        <div><label class="label" for="sigEditFix">Remediation</label><input id="sigEditFix" class="input"></div>
+        <div class="flex justify-end gap-2 pt-1">
+          <button type="button" class="btn btn-ghost" onclick="closeModal('sigEditModal')">Anuluj</button>
+          <button class="btn btn-primary" type="submit" onclick="saveSigEdit()">💾 Save Changes</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <div id="toasts" class="fixed bottom-4 right-4 z-[80] space-y-2 pointer-events-none"></div>
 
   <script>
@@ -434,11 +529,13 @@
       signatures: [],
       roles: [],
       hostHistory: [],
+      jobs: [],
       cy: null,
       graphFilter: null,
       panel: "findings",
       lastScanInput: null,
       lastNextCursor: null,
+      selectedFindings: new Set(),
     };
 
     const $ = (id) => document.getElementById(id);
@@ -465,16 +562,13 @@
     function closeModal(id) { $(id).classList.add("hidden"); }
 
     function applyPermissions() {
-      // Tab visibility
       document.querySelectorAll(".tab-btn[data-tab]").forEach((btn) => {
         const perm = btn.dataset.perm;
         btn.classList.toggle("hidden", !!(perm && !isPermitted(perm)));
       });
-      // Section visibility
       document.querySelectorAll("section[data-perm]").forEach((sec) => {
         sec.classList.toggle("hidden", !isPermitted(sec.dataset.perm));
       });
-      // Button/action visibility
       document.querySelectorAll("[data-perm]").forEach((el) => {
         const perms = String(el.dataset.perm || "").split(",").map((p) => p.trim()).filter(Boolean);
         const allowed = perms.some((p) => isPermitted(p));
@@ -572,8 +666,9 @@
       $(`tab-${name}`).classList.remove("hidden");
       document.querySelectorAll(".tab-btn[data-tab]").forEach((b) => b.classList.toggle("active", b.dataset.tab === name));
       if (name === "dashboard" && STATE.cy) setTimeout(() => STATE.cy.resize(), 30);
-      if (name === "history") { loadScans(); loadHostHistory(); }
+      if (name === "history") { loadScans(); loadHostHistory(); loadTimeline(); }
       if (name === "admin") { loadSignatures(); loadUsersAndRoles(); }
+      if (name === "scanner") { loadJobs(); }
     }
 
     /* ------------------------------------------------------------------ */
@@ -590,8 +685,13 @@
       return `<span class="badge st-${esc(st)}">${esc(st)}${pct}</span>`;
     }
 
+    function priorityBadge(tier) {
+      const t = String(tier || "P4-LOW");
+      const cls = t.startsWith("P1") ? "p1-badge" : t.startsWith("P2") ? "p2-badge" : t.startsWith("P3") ? "p3-badge" : "p4-badge";
+      return `<span class="badge ${cls}">${esc(t)}</span>`;
+    }
+
     function filterByTech(tech) {
-      // Filter asset table to show only assets with this technology
       var visible = 0;
       var allAssets = list(STATE.scan && STATE.scan.subdomains);
       if (!allAssets.length) return;
@@ -602,7 +702,8 @@
         var http = a.http || {};
         var techs = (http.technologies || []).concat(
           (http.server || "").toLowerCase(),
-          (http.title || "").toLowerCase()
+          (http.title || "").toLowerCase(),
+          (http.footer_version || "").toLowerCase()
         );
         var match = techs.some(function(t) { return t.indexOf(tech.toLowerCase()) >= 0; });
         var row = rows[i];
@@ -611,7 +712,6 @@
           if (match) visible++;
         }
       }
-      // Show tech summary with updated count
       renderTechSummary(STATE.scan);
       $("techSummary").classList.toggle("hidden", visible === 0);
     }
@@ -696,7 +796,7 @@
       const findings = currentFindings();
       const panel = $("findingsPanel");
       if (panel) $("panelCount").textContent = STATE.panel === "findings" ? `${findings.length} findings` : $("panelCount").textContent;
-      if (!findings.length) { panel.innerHTML = `<p class="text-xs text-slate-500 py-8 text-center">Brak findings dla bieżącego filtra.</p>`; return; }
+      if (!findings.length) { panel.innerHTML = `<p class="text-xs text-slate-500 py-8 text-center">Brak findings dla bieżącego filtra.</p>`; updateSelCount(); return; }
       panel.innerHTML = findings.map((f) => {
         const tags = list(f.tags);
         const sigTag = f.source === "signature" ? `<span class="chip" style="border-color:#7c3aed;color:#ddd6fe">signature</span>` : "";
@@ -704,9 +804,10 @@
         const mitre = f.mitre_id ? `<span class="chip">${esc(f.mitre_id)} · ${esc(f.mitre_tactic || "")}</span>` : "";
         const notes = f.notes ? `<p class="text-[11px] text-amber-200/90 bg-amber-950/30 border border-amber-900/40 rounded px-2 py-1">📝 ${esc(f.notes)}</p>` : "";
         const tagHtml = tags.length ? `<div class="flex flex-wrap gap-1">${tags.map((t) => `<span class="chip">${esc(t)}</span>`).join("")}</div>` : "";
+        const checked = STATE.selectedFindings.has(f.id) ? "checked" : "";
         const editBtn = isPermitted("modify") ? `<button class="btn btn-ghost" onclick="openOverride('finding','${esc(f.id)}')">✏️ Edit Override</button>` : "";
         return `<div class="fade-in rounded-lg border border-slate-800 bg-slate-950/50 p-2.5 space-y-1.5">
-          <div class="flex items-start gap-1.5 flex-wrap">${severityBadge(f.severity)}${mitre}${cve}${sigTag}</div>
+          <div class="flex items-start gap-1.5 flex-wrap"><input type="checkbox" class="accent-cyan-400 finding-cb" value="${esc(f.id)}" ${checked} onchange="toggleFindingSel(this)">${severityBadge(f.severity)}${mitre}${cve}${sigTag}</div>
           <p class="text-xs font-bold text-slate-100 leading-snug">${esc(f.title)}</p>
           <p class="text-[11px] font-mono text-cyan-300">${esc(f.host)}</p>
           <p class="text-[11px] text-slate-400 leading-snug">${esc(f.evidence)}</p>
@@ -718,6 +819,18 @@
           </div>
         </div>`;
       }).join("");
+      updateSelCount();
+    }
+
+    function toggleFindingSel(cb) {
+      if (cb.checked) STATE.selectedFindings.add(cb.value);
+      else STATE.selectedFindings.delete(cb.value);
+      updateSelCount();
+    }
+
+    function updateSelCount() {
+      const el = $("selCount");
+      if (el) el.textContent = `Selected: ${STATE.selectedFindings.size}`;
     }
 
     function renderChains() {
@@ -738,9 +851,11 @@
 
     function renderAssets() {
       const assets = list(STATE.scan && STATE.scan.subdomains);
-      $("assetCount").textContent = `${assets.length} assets`;
-      if (!assets.length) { $("assetRows").innerHTML = `<tr><td colspan="7" class="text-center text-slate-500 py-6">Brak assetów. Uruchom demo lub import.</td></tr>`; return; }
-      $("assetRows").innerHTML = assets.map((a) => {
+      // Sort by interestingness_score descending (analytical priority)
+      const sorted = [...assets].sort((a, b) => num(b.interestingness_score) - num(a.interestingness_score));
+      $("assetCount").textContent = `${assets.length} assets (sorted by priority)`;
+      if (!assets.length) { $("assetRows").innerHTML = `<tr><td colspan="8" class="text-center text-slate-500 py-6">Brak assetów. Uruchom demo lub import.</td></tr>`; return; }
+      $("assetRows").innerHTML = sorted.map((a) => {
         const http = a.http || {};
         const ips = list(a.ips);
         const cnames = list(a.cnames);
@@ -754,6 +869,7 @@
           `<div class="text-slate-400">HTTP ${esc(http.status ?? "—")} · ${esc(http.server || "—")}${http.x_powered_by ? " · " + esc(http.x_powered_by) : ""}</div>`,
           `<div class="text-slate-500">Cookies: ${esc(cookies)}</div>`,
           `<div class="text-slate-500">Tech: ${esc(tech)}</div>`,
+          http.footer_version ? `<div class="text-slate-500">Footer: ${esc(http.footer_version)}</div>` : "",
           `<div class="text-slate-600 font-mono text-[10px]">favicon: ${esc(http.favicon_hash || "—")}</div>`,
         ].join("");
         const edit = isPermitted("modify") ? `<button class="btn btn-ghost" onclick="openOverride('host','${esc(a.host)}')">✏️ Edit Asset</button>` : `<span class="text-[10px] text-slate-600">read-only</span>`;
@@ -764,6 +880,7 @@
           <td class="min-w-[250px] space-y-0.5">${fp}</td>
           <td>${stabilityBadge(a.stability, a.confidence_pct)}<div class="text-[10px] text-slate-500 mt-0.5">${num(a.seen_count)}/${num(a.scan_count)} · missed ${num(a.missed_streak)}</div></td>
           <td><span class="text-sm font-black" style="color:${scoreColor(score)}">${score}</span></td>
+          <td>${priorityBadge(a.priority_tier)}<div class="text-[10px] text-slate-500 mt-0.5">score: ${num(a.interestingness_score)}</div></td>
           <td class="text-right">${edit}</td>
         </tr>`;
       }).join("");
@@ -772,6 +889,7 @@
     function renderScan(scan) {
       STATE.scan = scan || {};
       STATE.graphFilter = null;
+      STATE.selectedFindings.clear();
       const summary = STATE.scan.summary || {};
       const cards = [
         { label:"Exposure Score", value:num(summary.exposure_score), sub:`Grade ${esc(summary.grade || "—")} · ${esc(summary.risk_level || "—")}`, color:scoreColor(num(summary.exposure_score)) },
@@ -889,8 +1007,26 @@
       if (!id) return toast("Brak zapisanego scanu do eksportu.", "error");
       try {
         const ext = fmt === "csv" ? "csv" : "json";
-        await downloadWithAuth(`/api/export/${id}?fmt=${encodeURIComponent(fmt)}`, `asi-scan-${id}-${fmt}.${ext}`);
+        let url = `/api/export/${id}?fmt=${encodeURIComponent(fmt)}`;
+        if (fmt === "defectdojo" && STATE.selectedFindings.size > 0) {
+          url += `&ids=${encodeURIComponent([...STATE.selectedFindings].join(","))}`;
+          if ($("evidenceToggle") && $("evidenceToggle").checked) url += "&evidence=true";
+        }
+        await downloadWithAuth(url, `asi-scan-${id}-${fmt}.${ext}`);
         toast(`Eksport ${fmt.toUpperCase()} pobrany.`, "ok");
+      } catch (e) { toast(e.message, "error"); }
+    }
+
+    async function exportSelectedDojo() {
+      if (STATE.selectedFindings.size === 0) return toast("Zaznacz co najmniej jeden finding.", "error");
+      const id = STATE.scan && (STATE.scan.scan_id || STATE.scan.id);
+      if (!id) return toast("Brak zapisanego scanu.", "error");
+      const evidence = $("evidenceToggle") ? $("evidenceToggle").checked : false;
+      const ids = [...STATE.selectedFindings].join(",");
+      try {
+        const url = `/api/export/${id}?fmt=defectdojo&ids=${encodeURIComponent(ids)}${evidence ? "&evidence=true" : ""}`;
+        await downloadWithAuth(url, `asi-selected-${id}-defectdojo.json`);
+        toast(`Wyeksportowano ${STATE.selectedFindings.size} selected findings to DefectDojo JSON.`, "ok");
       } catch (e) { toast(e.message, "error"); }
     }
 
@@ -907,14 +1043,15 @@
       const id = STATE.scan && (STATE.scan.scan_id || STATE.scan.id);
       const err = $("dojoError"); err.classList.add("hidden");
       try {
-        const data = await api("/api/defectdojo/push", {
-          method:"POST", body: {
-            scan_id: id,
-            url: $("dojoUrl").value.trim(),
-            api_token: $("dojoToken").value.trim(),
-            engagement_id: Number($("dojoEngagement").value),
-          },
-        });
+        const body = {
+          scan_id: id,
+          url: $("dojoUrl").value.trim(),
+          api_token: $("dojoToken").value.trim(),
+          engagement_id: Number($("dojoEngagement").value),
+        };
+        if (STATE.selectedFindings.size > 0) body.finding_ids = [...STATE.selectedFindings];
+        if ($("evidenceToggle") && $("evidenceToggle").checked) body.as_info_evidence = true;
+        const data = await api("/api/defectdojo/push", { method:"POST", body });
         closeModal("dojoModal");
         toast(`DefectDojo: ${data.findings} findings (HTTP ${data.status_code}).`, "ok");
       } catch (e) { $("dojoError").textContent = e.message; $("dojoError").classList.remove("hidden"); }
@@ -1061,6 +1198,118 @@
     }
 
     /* ------------------------------------------------------------------ */
+    /* Cyclic Scheduled Jobs                                              */
+    /* ------------------------------------------------------------------ */
+    async function loadJobs() {
+      if (!STATE.user) return;
+      try {
+        STATE.jobs = list(await api("/api/jobs"));
+        renderJobs();
+      } catch (e) { toast(e.message, "error"); }
+    }
+
+    function renderJobs() {
+      const panel = $("jobsPanel");
+      if (!panel) return;
+      if (!STATE.jobs.length) { panel.innerHTML = `<p class="text-[11px] text-slate-500">No active jobs.</p>`; return; }
+      panel.innerHTML = STATE.jobs.map((j) => {
+        const statusBadge = j.status === "active"
+          ? `<span class="badge st-active">active</span>`
+          : j.status === "paused_window_expired"
+            ? `<span class="badge st-inactive">paused</span>`
+            : `<span class="badge st-flaky">${esc(j.status)}</span>`;
+        const progress = j.total_hosts > 0 ? Math.round((j.cursor / j.total_hosts) * 100) : 0;
+        const editBtn = isPermitted("modify") ? `<button class="btn btn-ghost" onclick="openJobEdit(${j.id})">✏️</button>` : "";
+        const runBtn = isPermittedAny("modify","add") ? `<button class="btn btn-ghost" onclick="runJobNow(${j.id})">▶ Run Now</button>` : "";
+        const delBtn = isPermitted("delete") ? `<button class="btn btn-danger" onclick="deleteJob(${j.id})">🗑</button>` : "";
+        return `<div class="rounded-lg border border-slate-800 bg-slate-950/50 p-2.5 space-y-1">
+          <div class="flex items-center justify-between gap-2 flex-wrap">
+            <span class="text-xs font-bold text-slate-100">${esc(j.job_name || "asi-job")}</span>
+            ${statusBadge}
+          </div>
+          <p class="text-[10px] text-slate-400 truncate">${esc(list(j.targets).join(", ") || "—")}</p>
+          <div class="flex items-center gap-2">
+            <div class="flex-1 h-1.5 bg-slate-800 rounded overflow-hidden"><div class="h-full bg-cyan-500" style="width:${progress}%"></div></div>
+            <span class="text-[10px] text-slate-500">${num(j.cursor)}/${num(j.total_hosts)} (${progress}%)</span>
+          </div>
+          <p class="text-[10px] text-slate-500">window: ${esc(j.window_start || "—")} → ${esc(j.window_end || "—")} · interval: ${esc(j.interval_minutes)}m</p>
+          <div class="flex gap-1">${runBtn}${editBtn}${delBtn}</div>
+        </div>`;
+      }).join("");
+    }
+
+    async function saveAsJob() {
+      if (!isPermitted("add")) return toast("Wymagane uprawnienie add.", "error");
+      const raw = $("targetsInput").value.trim();
+      if (!raw) return toast("Podaj targets.", "error");
+      const targets = raw.split(/[\n,;]+/).map((s)=>s.trim()).filter(Boolean);
+      const body = {
+        job_name: `asi-job-${new Date().toISOString().slice(0,10)}`,
+        targets,
+        chunk_size: Number($("batchInput").value) || 256,
+        window_start: $("windowStart").value.trim() || null,
+        window_end: $("windowEnd").value.trim() || null,
+        interval_minutes: Number($("windowInput").value) || 60,
+        rate_limit_rps: Number($("rateInput").value) || 5,
+      };
+      try {
+        await api("/api/jobs", { method:"POST", body });
+        toast("Recurring job saved.", "ok");
+        await loadJobs();
+      } catch (e) { toast(e.message, "error"); }
+    }
+
+    async function runJobNow(jobId) {
+      if (!isPermittedAny("modify","add")) return toast("Wymagane uprawnienie modify lub add.", "error");
+      try {
+        const jobs = await api(`/api/jobs/${jobId}/run-now`, { method:"POST" });
+        STATE.jobs = list(jobs);
+        renderJobs();
+        toast(`Job #${jobId} chunk executed.`, "ok");
+      } catch (e) { toast(e.message, "error"); }
+    }
+
+    async function deleteJob(jobId) {
+      if (!isPermitted("delete")) return toast("Wymagane uprawnienie delete.", "error");
+      if (!confirm(`Delete job #${jobId}?`)) return;
+      try {
+        await api(`/api/jobs/${jobId}`, { method:"DELETE" });
+        toast(`Job #${jobId} deleted.`, "ok");
+        await loadJobs();
+      } catch (e) { toast(e.message, "error"); }
+    }
+
+    function openJobEdit(jobId) {
+      const job = STATE.jobs.find(j => j.id === jobId);
+      if (!job) return;
+      $("jobEditId").value = job.id;
+      $("jobEditName").value = job.job_name || "";
+      $("jobEditInterval").value = job.interval_minutes || 60;
+      $("jobEditRate").value = job.rate_limit_rps || 5;
+      $("jobEditWindowStart").value = job.window_start || "";
+      $("jobEditWindowEnd").value = job.window_end || "";
+      openModal("jobEditModal");
+    }
+
+    async function saveJobEdit() {
+      const jobId = Number($("jobEditId").value);
+      if (!jobId) return;
+      const body = {
+        job_name: $("jobEditName").value.trim(),
+        interval_minutes: Number($("jobEditInterval").value) || 60,
+        rate_limit_rps: Number($("jobEditRate").value) || 5,
+        window_start: $("jobEditWindowStart").value.trim() || null,
+        window_end: $("jobEditWindowEnd").value.trim() || null,
+      };
+      try {
+        await api(`/api/jobs/${jobId}`, { method:"PUT", body });
+        closeModal("jobEditModal");
+        toast("Job updated.", "ok");
+        await loadJobs();
+      } catch (e) { toast(e.message, "error"); }
+    }
+
+    /* ------------------------------------------------------------------ */
     /* History, diff, stability                                           */
     /* ------------------------------------------------------------------ */
     function statusBadge(status) {
@@ -1118,17 +1367,17 @@
       $("hostRows").innerHTML = rows.map((h) => {
         const unstable = h.stability === "flaky" || h.stability === "inactive" || h.stability === "unreachable";
         const slotsRaw = typeof h.time_slots === "string"
-        ? JSON.parse(h.time_slots)
-        : h.time_slots;
-      const slots = typeof slotsRaw === "object" && slotsRaw !== null
-        ? Object.entries(slotsRaw).filter(([, v]) => String(v).match(/^\d+$/))
-        : [];
-      const slotsStr =
-        slots.length > 0
-          ? slots
-              .map(([period, count]) => `${period}UTC: ${count}↑/${slots.length - count}↓`)
-              .join(" | ")
-          : "—";
+          ? JSON.parse(h.time_slots)
+          : h.time_slots;
+        const slots = typeof slotsRaw === "object" && slotsRaw !== null
+          ? Object.entries(slotsRaw).filter(([, v]) => String(v).match(/^\d+$/))
+          : [];
+        const slotsStr =
+          slots.length > 0
+            ? slots
+                .map(([period, count]) => `${period}UTC: ${count}↑/${slots.length - count}↓`)
+                .join(" | ")
+            : "—";
         return `<tr style="${unstable?"background:rgba(120,53,15,.14)":""}">
           <td class="font-mono text-cyan-300">${esc(h.host)}</td>
           <td>${stabilityBadge(h.stability, h.confidence_pct)}</td>
@@ -1176,6 +1425,55 @@
     }
 
     /* ------------------------------------------------------------------ */
+    /* Timeline chart                                                     */
+    /* ------------------------------------------------------------------ */
+    async function loadTimeline() {
+      if (!STATE.user) return;
+      try {
+        const points = await api("/api/timeline");
+        renderTimeline(points);
+      } catch (e) { toast(e.message, "error"); }
+    }
+
+    function renderTimeline(points) {
+      const container = $("timelineChart");
+      if (!container) return;
+      if (!points.length) { container.innerHTML = `<p class="text-xs text-slate-500 py-8 text-center">Brak danych do wyświetlenia trendu.</p>`; return; }
+      const W = 800, H = 200, P = 40;
+      const maxScore = Math.max(100, ...points.map(p => p.exposure_score));
+      const maxAssets = Math.max(1, ...points.map(p => p.assets_discovered));
+      const maxFindings = Math.max(1, ...points.map(p => p.findings_total));
+      const step = (W - P * 2) / Math.max(points.length - 1, 1);
+      const yScore = (v) => H - P - (v / maxScore) * (H - P * 2);
+      const yAssets = (v) => H - P - (v / maxAssets) * (H - P * 2);
+      const yFindings = (v) => H - P - (v / maxFindings) * (H - P * 2);
+      let scorePath = "", assetsPath = "", findingsPath = "";
+      points.forEach((p, i) => {
+        const x = P + i * step;
+        scorePath += (i === 0 ? "M" : "L") + x + "," + yScore(p.exposure_score) + " ";
+        assetsPath += (i === 0 ? "M" : "L") + x + "," + yAssets(p.assets_discovered) + " ";
+        findingsPath += (i === 0 ? "M" : "L") + x + "," + yFindings(p.findings_total) + " ";
+      });
+      const gridLines = [0.25, 0.5, 0.75].map(f => {
+        const y = H - P - f * (H - P * 2);
+        return `<line x1="${P}" y1="${y}" x2="${W-P}" y2="${y}" stroke="#1e293b" stroke-width="0.5" stroke-dasharray="4,4"/>`;
+      }).join("");
+      container.innerHTML = `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:100%" preserveAspectRatio="xMidYMid meet">
+        ${gridLines}
+        <path d="${scorePath}" fill="none" stroke="#f87171" stroke-width="2" stroke-linejoin="round"/>
+        <path d="${assetsPath}" fill="none" stroke="#38bdf8" stroke-width="2" stroke-linejoin="round"/>
+        <path d="${findingsPath}" fill="none" stroke="#fb923c" stroke-width="2" stroke-linejoin="round"/>
+        ${points.map((p, i) => {
+          const x = P + i * step;
+          return `<circle cx="${x}" cy="${yScore(p.exposure_score)}" r="3" fill="#f87171"/><circle cx="${x}" cy="${yAssets(p.assets_discovered)}" r="3" fill="#38bdf8"/><circle cx="${x}" cy="${yFindings(p.findings_total)}" r="3" fill="#fb923c"/>`;
+        }).join("")}
+        <text x="${P}" y="${H - 10}" fill="#64748b" font-size="10">Exposure Score (red)</text>
+        <text x="${P + 130}" y="${H - 10}" fill="#64748b" font-size="10">Assets (blue)</text>
+        <text x="${P + 210}" y="${H - 10}" fill="#64748b" font-size="10">Findings (orange)</text>
+      </svg>`;
+    }
+
+    /* ------------------------------------------------------------------ */
     /* Signatures                                                         */
     /* ------------------------------------------------------------------ */
     async function loadSignatures() {
@@ -1188,7 +1486,8 @@
       $("sigRows").innerHTML = STATE.signatures.map((s) => {
         const match = s.match_type === "path" ? `GET ${esc(s.path||"/")} → ${esc(s.match_value||"status_lt_400")}` : `${esc(s.match_key ? s.match_key+": ":"")}${esc(s.match_value||"—")}`;
         const del = isPermitted("delete") ? `<button class="btn btn-danger" onclick="deleteSignature(${s.id})">🗑</button>` : "";
-        return `<tr><td><div class="text-slate-200 font-semibold">${esc(s.name)}</div><div class="text-[10px] text-slate-500">${esc(s.category||"")}${s.builtin?" · builtin":""}</div></td><td><span class="chip">${esc(s.match_type)}</span></td><td class="font-mono text-[10px] text-slate-400 max-w-[240px] break-all">${match}</td><td>${severityBadge(s.severity)}</td><td class="text-right">${del}</td></tr>`;
+        const edit = isPermitted("modify") ? `<button class="btn btn-ghost" onclick="openSigEdit(${s.id})">✏️</button>` : "";
+        return `<tr><td><div class="text-slate-200 font-semibold">${esc(s.name)}</div><div class="text-[10px] text-slate-500">${esc(s.category||"")}${s.builtin?" · builtin":""}</div></td><td><span class="chip">${esc(s.match_type)}</span></td><td class="font-mono text-[10px] text-slate-400 max-w-[240px] break-all">${match}</td><td>${severityBadge(s.severity)}</td><td class="text-right whitespace-nowrap">${edit} ${del}</td></tr>`;
       }).join("");
     }
 
@@ -1213,6 +1512,65 @@
       if (!isPermitted("delete")) return toast("Wymagane uprawnienie delete.", "error");
       if (!confirm("Usunąć tę sygnaturę?")) return;
       try { await api(`/api/signatures/${id}`, { method:"DELETE" }); toast("Sygnatura usunięta.", "ok"); await loadSignatures(); } catch (e) { toast(e.message, "error"); }
+    }
+
+    async function exportSignatures() {
+      if (!isPermitted("read")) return toast("Wymagane uprawnienie read.", "error");
+      try {
+        const sigs = await api("/api/signatures/export");
+        const blob = new Blob([JSON.stringify(sigs, null, 2)], { type: "application/json" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url; a.download = "asi-signatures.json";
+        document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+        toast("Signatures exported.", "ok");
+      } catch (e) { toast(e.message, "error"); }
+    }
+
+    async function importSignatures(event) {
+      if (!isPermitted("add")) return toast("Wymagane uprawnienie add.", "error");
+      const file = event.target.files && event.target.files[0];
+      if (!file) return;
+      try {
+        const text = await file.text();
+        const sigs = JSON.parse(text);
+        if (!Array.isArray(sigs)) throw new Error("Expected JSON array of signatures.");
+        const result = await api("/api/signatures/import", { method:"POST", body: sigs });
+        toast(`Imported ${result.imported} signatures (${result.errors.length} errors).`, "ok");
+        await loadSignatures();
+      } catch (e) { toast(e.message, "error"); }
+      event.target.value = "";
+    }
+
+    function openSigEdit(sigId) {
+      const sig = STATE.signatures.find(s => s.id === sigId);
+      if (!sig) return;
+      $("sigEditId").value = sig.id;
+      $("sigEditName").value = sig.name || "";
+      $("sigEditSeverity").value = sig.severity || "MEDIUM";
+      $("sigEditValue").value = sig.match_value || "";
+      $("sigEditDesc").value = sig.description || "";
+      $("sigEditFix").value = sig.remediation || "";
+      openModal("sigEditModal");
+    }
+
+    async function saveSigEdit() {
+      const sigId = Number($("sigEditId").value);
+      if (!sigId) return;
+      const body = {
+        name: $("sigEditName").value.trim(),
+        severity: $("sigEditSeverity").value,
+        match_value: $("sigEditValue").value.trim() || null,
+        description: $("sigEditDesc").value.trim() || null,
+        remediation: $("sigEditFix").value.trim() || null,
+      };
+      try {
+        await api(`/api/signatures/${sigId}`, { method:"PUT", body });
+        closeModal("sigEditModal");
+        toast("Signature updated.", "ok");
+        await loadSignatures();
+      } catch (e) { toast(e.message, "error"); }
     }
 
     /* ------------------------------------------------------------------ */
@@ -1240,6 +1598,41 @@
     }
 
     /* ------------------------------------------------------------------ */
+    /* Encryption proof (admin-only)                                      */
+    /* ------------------------------------------------------------------ */
+    async function openEncProof() {
+      if (!isPermitted("manage_config")) return toast("Wymagane uprawnienie manage_config.", "error");
+      try {
+        const proof = await api("/api/admin/encryption-proof");
+        let html = `<h3 class="text-sm font-bold text-white mb-2">Latest Scans (raw ciphertext)</h3>`;
+        if (proof.scans && proof.scans.length) {
+          proof.scans.forEach(s => {
+            html += `<div class="rounded-lg border border-slate-800 bg-slate-950/50 p-2.5 mb-2 space-y-1">
+              <p class="text-[11px] font-bold text-slate-100">Scan #${s.scan_id} — ${esc(s.target)}</p>
+              <p class="text-[10px] text-slate-400"><b class="text-cyan-300">summary_enc:</b> <code class="text-emerald-300 break-all">${esc(s.summary_enc_prefix)}...</code></p>
+              <p class="text-[10px] text-slate-400"><b class="text-cyan-300">payload_enc:</b> <code class="text-emerald-300 break-all">${esc(s.payload_enc_prefix)}...</code></p>
+              <p class="text-[10px] text-slate-500">Decrypted: score=${esc(s.summary_decrypted_preview.exposure_score)} grade=${esc(s.summary_decrypted_preview.grade)} findings=${esc(s.summary_decrypted_preview.findings_total)}</p>
+            </div>`;
+          });
+        } else {
+          html += `<p class="text-xs text-slate-500">No scans yet.</p>`;
+        }
+        if (proof.overrides && proof.overrides.length) {
+          html += `<h3 class="text-sm font-bold text-white mb-2 mt-3">Latest Overrides (raw ciphertext)</h3>`;
+          proof.overrides.forEach(o => {
+            html += `<div class="rounded-lg border border-slate-800 bg-slate-950/50 p-2.5 mb-2 space-y-1">
+              <p class="text-[11px] font-bold text-slate-100">${esc(o.asset_key)}</p>
+              <p class="text-[10px] text-slate-400"><b class="text-cyan-300">notes_enc:</b> <code class="text-emerald-300 break-all">${esc(o.notes_enc_prefix)}...</code></p>
+              <p class="text-[10px] text-slate-500">Decrypted: ${esc(o.notes_decrypted)}</p>
+            </div>`;
+          });
+        }
+        $("encProofBody").innerHTML = html;
+        openModal("encProofModal");
+      } catch (e) { toast(e.message, "error"); }
+    }
+
+    /* ------------------------------------------------------------------ */
     /* Bootstrap                                                          */
     /* ------------------------------------------------------------------ */
     async function bootstrapData() {
@@ -1247,6 +1640,7 @@
       await loadScans();
       await loadSignatures();
       await loadHostHistory();
+      await loadJobs();
       if (isPermitted("manage_users")) await loadUsersAndRoles();
       if (STATE.scans.length) {
         const newest = STATE.scans[0].scan_id || STATE.scans[0].id;
@@ -1258,7 +1652,7 @@
       ensureGraph();
       renderKpisEmpty();
       renderAuth();
-      document.querySelectorAll("#loginModal, #overrideModal, #dojoModal").forEach((m) => {
+      document.querySelectorAll("#loginModal, #overrideModal, #dojoModal, #encProofModal, #jobEditModal, #sigEditModal").forEach((m) => {
         m.addEventListener("click", (e) => { if (e.target === m) m.classList.add("hidden"); });
       });
       if (STATE.token) {

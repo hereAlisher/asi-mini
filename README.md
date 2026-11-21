@@ -66,9 +66,25 @@ Link to full technical documentation: [docs/TECHNICAL.md](docs/TECHNICAL.md)
 
 All **24** previous checks still pass, plus new checks:
 
-- Creating a recurring job (`10.0.0.0/18`, window `00:00`‑`23:59`, interval `30`) → **200**
+- Creating a recurring job (`10.0.0.0/18`, window `00:00`-`23:59`, interval `30`) -> **200**
 - `POST /api/jobs/{id}/run-now` advances `cursor_index` and saves an encrypted scan
 - `auditor` gets **403** on `POST /api/jobs` and `DELETE /api/jobs/{id}`
 - `GET /` returns **200** and every `/api/...` call in `static/index.html` matches an existing route in `main.py`
 
 The included test flow verifies all four roles, 403 enforcement for read-only users, `10.0.0.0/18` planning (16,382 hosts), encrypted SQLite rows, demo1/demo2 drift (new WordPress+Redis host and flaky offline host), persistent overrides on a third scan, and DefectDojo/CSV exports.
+
+## Lab Target Simulator
+
+For live jury demos, launch 3 local HTTP servers (stdlib-only, no deps):
+
+```powershell
+.\.venv\Scripts\python.exe lab_sim.py
+```
+
+| Port | Service | Purpose |
+|------|---------|---------|
+| 9001 | LabCMS (WordPress) | CMS fingerprint, PHPSESSID cookie, /admin 200, footer version |
+| 9002 | Staging API (Werkzeug) | Staging hostname detection, /version endpoint |
+| 9003 | Flaky IoT (Cisco-ASA) | Alternates 200/503 to prove flaky-host detection |
+
+Press `Ctrl+C` to stop all servers.

@@ -266,6 +266,8 @@ class DojoPushPayload(BaseModel):
     engagement: int | None = None
     minimum_severity: str = "Low"
     close_old_findings: bool = False
+    finding_ids: list[str] | None = None
+    as_info_evidence: bool = False
 
 
 # ---------------------------------------------------------------------------
@@ -288,12 +290,18 @@ PERMISSION_RULES: list[tuple[str, str, Any]] = [
     ("POST", r"^/api/import$", "add"),
     ("GET", r"^/api/signatures$", "read"),
     ("POST", r"^/api/signatures$", "add"),
+    ("PUT", r"^/api/signatures/\d+$", "modify"),
+    ("GET", r"^/api/signatures/export$", "read"),
+    ("POST", r"^/api/signatures/import$", "add"),
     ("DELETE", r"^/api/signatures/\d+$", "delete"),
     ("GET", r"^/api/export/\d+$", "read"),
+    ("GET", r"^/api/timeline$", "read"),
+    ("GET", r"^/api/admin/encryption-proof$", "manage_config"),
     ("POST", r"^/api/defectdojo/push$", "modify"),
     ("GET", r"^/api/host-history$", "read"),
     ("GET", r"^/api/jobs$", "read"),
     ("POST", r"^/api/jobs$", "add"),
+    ("PUT", r"^/api/jobs/\d+$", "modify"),
     ("POST", r"^/api/jobs/\d+/run-now$", ("modify", "add")),
     ("DELETE", r"^/api/jobs/\d+$", "delete"),
 ]
@@ -660,11 +668,15 @@ async def remove_signature(sig_id: int, user: dict = Depends(require("delete")))
 # Exports / DefectDojo
 # ---------------------------------------------------------------------------
 @app.get("/api/export/{scan_id}")
-async def export(scan_id: int, fmt: str = Query("json"), user: dict = Depends(require("read"))):
+async def export(scan_id: int, fmt: str = Query("json"),
+                 ids: str | None = Query(None, description="Comma-separated finding IDs"),
+                 evidence: bool = Query(False, description="Export as Info/Evidence"),
+                 user: dict = Depends(require("read"))):
     result = storage.get_scan(scan_id)
     if not result:
         raise HTTPException(status_code=404, detail="Scan not found.")
     fmt = (fmt or "json").lower()
+    finding_ids = [x.strip() for x in ids.split(",") if x.strip()] if ids else None
     if fmt == "json":
         return JSONResponse(result)
     if fmt == "csv":
@@ -674,7 +686,7 @@ async def export(scan_id: int, fmt: str = Query("json"), user: dict = Depends(re
             headers={"Content-Disposition": f'attachment; filename="asi-scan-{scan_id}.csv"'},
         )
     if fmt in ("defectdojo", "dojo"):
-        return JSONResponse(export_defectdojo_json(result))
+        return JSONResponse(export_defectdojo_json(result, finding_ids=finding_ids, as_info_evidence=evidence))
     raise HTTPException(status_code=400, detail="fmt must be json, csv or defectdojo.")
 
 
@@ -690,7 +702,7 @@ async def defectdojo_push(payload: DojoPushPayload, user: dict = Depends(require
     engagement_id = payload.engagement_id if payload.engagement_id is not None else payload.engagement
     if not target_url or not api_token or engagement_id is None:
         raise HTTPException(status_code=400, detail="url, api_token and engagement_id are required.")
-    body = export_defectdojo_json(result)
+    body = export_defectdojo_json(result, finding_ids=payload.finding_ids, as_info_evidence=payload.as_info_evidence)
     url = target_url.rstrip("/")
     if "/api/v2/import-scan" not in url:
         url = f"{url}/import-scan" if url.endswith("/api/v2") else f"{url}/api/v2/import-scan"
@@ -735,6 +747,15 @@ async def create_job(payload: dict = Body(default={}), user: dict = Depends(requ
     return storage.create_scan_job(payload, user.get("username"))
 
 
+@app.put("/api/jobs/{job_id}")
+async def update_job(job_id: int, payload: dict = Body(default={}), user: dict = Depends(require("modify"))):
+    job = storage.get_scan_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found.")
+    updated = storage.update_scan_job(job_id, **payload)
+    return updated or job
+
+
 @app.post("/api/jobs/{job_id}/run-now")
 async def run_job_now(job_id: int, user: dict = Depends(require("modify", "add"))):
     job = storage.get_scan_job(job_id)
@@ -753,6 +774,80 @@ async def delete_job(job_id: int, user: dict = Depends(require("delete"))):
     if not storage.delete_scan_job(job_id):
         raise HTTPException(status_code=404, detail="Job not found.")
     return {"ok": True, "deleted": job_id}
+
+
+# ---------------------------------------------------------------------------
+# Timeline / trend chart data
+# ---------------------------------------------------------------------------
+@app.get("/api/timeline")
+async def timeline(user: dict = Depends(require("read"))):
+    scans = storage.list_scans(limit=50, offset=0)
+    points = []
+    for s in reversed(scans):
+        points.append({
+            "scan_id": s.get("scan_id") or s.get("id"),
+            "scanned_at": s.get("scanned_at"),
+            "target": s.get("target"),
+            "exposure_score": s.get("exposure_score") or 0,
+            "assets_discovered": s.get("host_count") or 0,
+            "findings_total": s.get("findings_total") or 0,
+            "critical_count": 0,
+            "flaky_count": 0,
+        })
+    return points
+
+
+# ---------------------------------------------------------------------------
+# Admin: encryption-at-rest proof
+# ---------------------------------------------------------------------------
+@app.get("/api/admin/encryption-proof")
+async def encryption_proof(user: dict = Depends(require("manage_config"))):
+    return storage.get_encryption_proof()
+
+
+# ---------------------------------------------------------------------------
+# Signature export / import
+# ---------------------------------------------------------------------------
+@app.get("/api/signatures/export")
+async def export_signatures(user: dict = Depends(require("read"))):
+    sigs = storage.list_signatures()
+    return JSONResponse(sigs, headers={"Content-Disposition": "attachment; filename=asi-signatures.json"})
+
+
+@app.post("/api/signatures/import")
+async def import_signatures(payload: list[dict] = Body(default=[]), user: dict = Depends(require("add"))):
+    imported = []
+    updated = []
+    errors = []
+    existing = {str(s.get("name") or "").strip().lower(): s for s in storage.list_signatures()}
+    for sig in payload:
+        if not isinstance(sig, dict):
+            errors.append("Non-dict signature skipped.")
+            continue
+        name = str(sig.get("name") or "").strip()
+        if not name:
+            errors.append("Signature without name skipped.")
+            continue
+        match = existing.get(name.lower())
+        try:
+            if match:
+                result = storage.update_signature(match["id"], sig)
+                updated.append(result)
+            else:
+                result = storage.add_signature(sig)
+                imported.append(result)
+        except ValueError as e:
+            errors.append(str(e))
+    return {"ok": True, "imported": len(imported), "updated": len(updated),
+            "errors": errors, "signatures": imported + updated}
+
+
+@app.put("/api/signatures/{sig_id}")
+async def update_sig(sig_id: int, payload: dict = Body(default={}), user: dict = Depends(require("modify"))):
+    result = storage.update_signature(sig_id, payload)
+    if not result:
+        raise HTTPException(status_code=404, detail="Signature not found.")
+    return result
 
 
 @app.get("/")

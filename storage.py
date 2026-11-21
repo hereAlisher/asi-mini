@@ -755,6 +755,75 @@ def delete_signature(sig_id: int) -> bool:
         return cur.rowcount > 0
 
 
+def update_signature(sig_id: int, data: dict) -> dict | None:
+    allowed = {"name", "category", "match_type", "match_key", "match_value", "path",
+               "severity", "description", "remediation", "mitre_id", "cve", "enabled"}
+    sets: list[str] = []
+    values: list[Any] = []
+    for key, value in data.items():
+        if key not in allowed:
+            continue
+        if key == "severity":
+            value = _normalise_severity(value) or "MEDIUM"
+        elif key == "enabled":
+            value = 1 if value else 0
+        sets.append(f"{key}=?")
+        values.append(value)
+    if not sets:
+        with _connect() as conn:
+            row = conn.execute("SELECT * FROM signatures WHERE id=?", (int(sig_id),)).fetchone()
+        return _signature_row(row) if row else None
+    values.append(int(sig_id))
+    with _connect() as conn:
+        conn.execute(f"UPDATE signatures SET {', '.join(sets)} WHERE id=?", values)
+        row = conn.execute("SELECT * FROM signatures WHERE id=?", (int(sig_id),)).fetchone()
+    return _signature_row(row) if row else None
+
+
+# ---------------------------------------------------------------------------
+# Encryption-at-rest proof (admin-only, never decrypts raw ciphertext)
+# ---------------------------------------------------------------------------
+def get_encryption_proof() -> dict:
+    """Return raw ciphertext samples from the latest scan and override,
+    paired with decrypted summary preview. Used by the admin proof inspector."""
+    proof: dict[str, Any] = {"scans": [], "overrides": []}
+    with _connect() as conn:
+        rows = conn.execute(
+            "SELECT id, target, summary_enc, payload_enc FROM scans ORDER BY id DESC LIMIT 3"
+        ).fetchall()
+        for r in rows:
+            summary_raw = (r["summary_enc"] or "")[:90]
+            payload_raw = (r["payload_enc"] or "")[:90]
+            summary_dec = decrypt_text(r["summary_enc"]) or ""
+            try:
+                summary_obj = json.loads(summary_dec) if summary_dec else {}
+            except (TypeError, ValueError):
+                summary_obj = {}
+            proof["scans"].append({
+                "scan_id": r["id"],
+                "target": r["target"],
+                "summary_enc_prefix": summary_raw,
+                "payload_enc_prefix": payload_raw,
+                "summary_decrypted_preview": {
+                    "exposure_score": summary_obj.get("exposure_score"),
+                    "grade": summary_obj.get("grade"),
+                    "findings_total": summary_obj.get("findings_total"),
+                    "assets_discovered": summary_obj.get("assets_discovered"),
+                },
+            })
+        orows = conn.execute(
+            "SELECT asset_key, notes_enc, tags_enc FROM overrides ORDER BY updated_at DESC LIMIT 3"
+        ).fetchall()
+        for r in orows:
+            notes_raw = (r["notes_enc"] or "")[:90]
+            proof["overrides"].append({
+                "asset_key": r["asset_key"],
+                "notes_enc_prefix": notes_raw,
+                "notes_decrypted": (decrypt_text(r["notes_enc"]) or "")[:120],
+            })
+    return proof
+
+
 # ---------------------------------------------------------------------------
 # Host history / stability
 # ---------------------------------------------------------------------------

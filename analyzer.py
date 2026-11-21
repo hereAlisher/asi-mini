@@ -455,6 +455,25 @@ def analyze_scan(scan: dict, overrides: Any = None, host_stats: dict | None = No
         asset["finding_count"] = len(h_findings)
         asset["severity_counts"] = {sev: sum(1 for f in h_findings if f["severity"] == sev)
                                     for sev in ("CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO")}
+        # Interestingness / priority score (0-100) combines risk, shadow signals, anomalies.
+        interesting = min(100, score)
+        if is_sensitive:
+            interesting = min(100, interesting + 15)
+        if http.get("cookies"):
+            interesting = min(100, interesting + 5)
+        if http.get("x_powered_by"):
+            interesting = min(100, interesting + 5)
+        if any(f.get("source") == "signature" for f in h_findings):
+            interesting = min(100, interesting + 10)
+        if stability == "flaky" or stability == "inactive":
+            interesting = min(100, interesting + 8)
+        asset["interestingness_score"] = int(interesting)
+        asset["priority_tier"] = (
+            "P1-CRITICAL" if interesting >= 75
+            else "P2-HIGH" if interesting >= 50
+            else "P3-MEDIUM" if interesting >= 25
+            else "P4-LOW"
+        )
         assets.append(asset)
 
     # Stable unique IDs (fingerprint prefix can theoretically collide).
@@ -704,11 +723,15 @@ def export_csv(scan_result: dict) -> str:
     return buffer.getvalue()
 
 
-def export_defectdojo_json(scan_result: dict) -> dict:
+def export_defectdojo_json(scan_result: dict, finding_ids: list[str] | None = None,
+                           as_info_evidence: bool = False) -> dict:
     contexts = _host_context(scan_result)
     scan_date = str(scan_result.get("scanned_at") or _now())[:10]
     findings = []
+    selected = set(str(x) for x in finding_ids) if finding_ids else None
     for finding in scan_result.get("findings") or []:
+        if selected is not None and str(finding.get("id")) not in selected:
+            continue
         host = str(finding.get("host") or "")
         asset = contexts.get(host.lower(), {})
         http = asset.get("http") or {}
@@ -719,6 +742,12 @@ def export_defectdojo_json(scan_result: dict) -> dict:
         tags = [str(t) for t in (finding.get("tags") or [])]
         if "asi-mini" not in tags:
             tags.append("asi-mini")
+        if as_info_evidence:
+            severity = "Info"
+            if "evidence" not in tags:
+                tags.append("evidence")
+            if "asi-observation" not in tags:
+                tags.append("asi-observation")
         references = ["ASI Mini — Attack Surface Intelligence"]
         if finding.get("mitre_id"):
             references.append(f"MITRE ATT&CK {finding['mitre_id']} ({finding.get('mitre_tactic') or ''})".strip())
