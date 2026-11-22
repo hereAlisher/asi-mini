@@ -1,8 +1,9 @@
-﻿services:
+services:
   asi:
     build: .
     ports:
       - "8000:8000"
+    extra_hosts: ["host.docker.internal:host-gateway"]
     environment:
       - ASI_DATA_DIR=/app/data
     volumes:

@@ -2,6 +2,49 @@
 
 Lightweight, zero-bloat Attack Surface Intelligence engine that uncovers external and internal infrastructure blind spots before attackers exploit them.
 
+## ⚡ Quickstart (1-Command Docker)
+
+```powershell
+docker compose up --build -d
+```
+
+- **Dashboard:** [http://localhost:8000](http://localhost:8000)
+- **Healthcheck:** [http://localhost:8000/api/health](http://localhost:8000/api/health)
+- **Data Persistence:** Stored in `./data/` volume (`asi_data.db` + `.asi_key`).
+- **Docker-to-Host Scanning:** Point scans to `host.docker.internal` to scan services on your host machine.
+
+## 🛡️ Default RBAC Accounts
+
+| Role | Username / Password | Permissions | Role Label / Scope |
+|---|---|---|---|
+| `admin` | `admin` / `admin123` | `read`, `modify`, `add`, `delete`, `manage_users`, `manage_config` | Administracja (Full SOC control) |
+| `operator` | `operator` / `operator123` | `read`, `modify` | Modyfikacja i odczyt (Triage & ops) |
+| `analyst` | `analyst` / `analyst123` | `read`, `modify`, `add`, `delete` | Dodawanie, usuwanie, modyfikacja (Scans & overrides) |
+| `auditor` | `auditor` / `auditor123` | `read` | Odczyt (Read-only compliance audit) |
+
+*Authenticate via `POST /api/login` and pass the returned token in the `X-Auth-Token` header.*
+
+## 🎯 Evaluation Lab Port Presets
+
+Tab 2 includes one-click preset chips for targeted evaluation and testing:
+
+| Preset | Target Ports | Evaluated Environment & Scenarios |
+|---|---|---|
+| **Quickstart Drift** | `2223,3001,5673,8787,15673` | Drift detection across SSH, web services, AMQP & RabbitMQ |
+| **Proxy / Latency** | `8085,8086,8474` | Traefik, Toxiproxy, timeout tolerances & response latency (ms) |
+| **Vulnerable Stack** | `21,8088,8089,8090` | FTP, DVWA, legacy web interfaces & unauthenticated admin portals |
+| **Modern Stack** | `80,81,443,6379,8080,8081` | HTTP/S, Nginx Proxy Manager, Redis cache & cloud microservices |
+| **10k+ CIDR Plan** | *(target: `10.0.0.0/18`)* | Lazy CIDR arithmetic slicing 16,382 hosts without RAM expansion |
+
+## 🏗️ Architecture Highlights
+
+- **4-File FastAPI Backend:** Ultra-small, maintainable codebase (`main.py`, `storage.py`, `scanner.py`, `analyzer.py`) paired with a single-file static dashboard (`static/index.html` via Tailwind & Cytoscape CDN).
+- **SQLite + Fernet AES At Rest:** Scan payloads, summaries, analyst notes, and tags stored with `enc:` Fernet AES encryption in SQLite. Key auto-generated in `.asi_key` or supplied via `ASI_MASTER_KEY`.
+- **Lazy >10k IP CIDR Batching:** Arithmetic slicing using Python stdlib `ipaddress` handles large address spaces (`10.0.0.0/18` = 16,382 hosts) safely without expanding addresses into memory.
+- **DefectDojo API v2 Selective Export:** Direct export and push to DefectDojo Generic Findings Import API with per-finding evidence toggle.
+- **Zero GPL Dependencies:** Exclusively MIT, BSD, Apache-2.0, and Python stdlib for clean AGH IP transfer compliance.
+- **91+ Automated Tests:** Comprehensive test coverage across RBAC 403 enforcement, persistent overrides, drift detection, signature matching, and flaky-host stability tracking.
+
 ## Key Capabilities
 - **10k+ Scale Planning:** Lazy CIDR arithmetic (`ipaddress`) slices `10.0.0.0/18` (16,382 hosts) into rate-limited, resumable chunks without expanding every IP into memory.
 - **Safe Passive + Active Discovery:** DNS (`A`, `CNAME`, `MX`, `SPF`, `DMARC`), TLS certificate health/expiry, optional async TCP checks or Nmap subprocess fallback, and read-only HTTP/HTTPS fingerprinting (title, status, headers, cookies, redirects, favicon SHA-256, CMS/framework/IoT technologies).
@@ -13,24 +56,7 @@ Lightweight, zero-bloat Attack Surface Intelligence engine that uncovers externa
 - **Unified Ingestion:** Manual, CSV, JSON and Nmap XML imports produce the same schema as live scans.
 - **Exports:** JSON, CSV and DefectDojo Generic Findings Import JSON, plus direct DefectDojo push.
 
-## Architecture (4 Python Files + 1 Static UI)
-- `main.py` — FastAPI server, `X-Auth-Token` RBAC middleware, auth/users, planning, scans, history, diff, overrides, imports, signatures, exports and DefectDojo push.
-- `storage.py` — SQLite schema, Fernet encryption, sessions, seeded RBAC, persistent overrides, host stability history and scan jobs.
-- `scanner.py` — target planning/slicing, rate limiting, time windows, DNS/TLS/TCP/HTTP fingerprinting, signature matching, importers and demo datasets.
-- `analyzer.py` — risk scoring, MITRE/CVE enrichment, attack chains, override merging, drift and exports.
-- `static/index.html` — single-page dark-mode SOC dashboard (Tailwind + Cytoscape.js CDN, no build step).
-
-## Default Accounts
-| Role key | Role label | Login | Permissions |
-|---|---|---|---|
-| `admin` | Administracja | `admin` / `admin123` | `read`, `modify`, `add`, `delete`, `manage_users`, `manage_config` |
-| `add_delete_modify` | Dodawanie, usuwanie, modyfikacja | `analyst` / `analyst123` | `read`, `modify`, `add`, `delete` |
-| `modify_read` | Modyfikacja i odczyt | `operator` / `operator123` | `read`, `modify` |
-| `read` | Odczyt | `auditor` / `auditor123` | `read` |
-
-Authenticate with `POST /api/login` and send the returned token as `X-Auth-Token`.
-
-## Quick Start
+## Local Quick Start (Without Docker)
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
@@ -40,20 +66,10 @@ python -m venv .venv
 
 Open `http://127.0.0.1:8000/`.
 
-## Docker (one-command)
-
-```powershell
-docker compose up --build
-```
-
-Open `http://localhost:8000/`.
-
-Data persists in the `./data/` volume (`asi_data.db` + `.asi_key`).
-
 Link to full technical documentation: [docs/TECHNICAL.md](docs/TECHNICAL.md)
 
 ## Key Endpoints
-- Auth: `POST /api/login`, `GET /api/me`, `GET/POST /api/users`, `GET/POST /api/roles`
+- Auth: `GET /api/health`, `POST /api/login`, `GET /api/me`, `GET/POST /api/users`, `GET/POST /api/roles`
 - Planning/scanning: `POST /api/plan`, `POST /api/scan`, `GET /api/scan`
 - History/drift/edits: `GET /api/scans`, `GET/DELETE /api/scans/{id}`, `GET /api/diff`, `GET/POST /api/overrides`
 - Imports/signatures: `POST /api/import`, `GET/POST /api/signatures`, `DELETE /api/signatures/{id}`

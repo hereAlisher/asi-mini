@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="pl" class="dark">
 <head>
   <meta charset="UTF-8" />
@@ -179,6 +179,7 @@
           <div>
             <label class="label" for="targetsInput">Targets — IPs, CIDRs or domains (comma/newline separated)</label>
             <textarea id="targetsInput" class="input font-mono" rows="4" placeholder="10.0.0.0/18&#10;149.156.10.10&#10;example.com">10.0.0.0/18</textarea>
+            <div class="text-[11px] text-slate-400 mt-1">Running in Docker? Target host.docker.internal to scan local lab services.</div>
             <div class="flex flex-wrap gap-1.5 mt-1.5">
               <button class="btn btn-ghost" onclick="fillCidr()">10.0.0.0/18 → 16 382 hosts</button>
               <button class="btn btn-ghost" onclick="fillDemoTargets()">Demo domains</button>
@@ -197,6 +198,14 @@
           <div class="flex flex-wrap items-center gap-3">
             <label class="flex items-center gap-1.5 text-xs text-slate-300"><input id="scanPorts" type="checkbox" class="accent-cyan-400"> Safe TCP port check</label>
             <div class="flex-1 min-w-[180px]"><label class="label" for="allowedPorts">Allowed ports</label><input id="allowedPorts" class="input" placeholder="80,443,22"></div>
+          </div>
+          <div class="flex flex-wrap items-center gap-1.5">
+            <span class="text-[11px] font-semibold text-slate-400">Presets:</span>
+            <button type="button" class="chip hover:border-cyan-400" onclick="applyPreset('drift')">Quickstart Drift</button>
+            <button type="button" class="chip hover:border-cyan-400" onclick="applyPreset('proxy')">Proxy / Latency</button>
+            <button type="button" class="chip hover:border-cyan-400" onclick="applyPreset('vuln')">Vulnerable Stack</button>
+            <button type="button" class="chip hover:border-cyan-400" onclick="applyPreset('modern')">Modern Stack</button>
+            <button type="button" class="chip hover:border-cyan-400" onclick="applyPreset('10k')">10k+ CIDR Plan</button>
           </div>
           <div class="flex flex-wrap gap-2">
             <button class="btn btn-primary" onclick="calculatePlan()">🧮 Calculate Plan &amp; Subgroups</button>
@@ -1060,7 +1069,26 @@
     /* ------------------------------------------------------------------ */
     /* Scanner & import                                                   */
     /* ------------------------------------------------------------------ */
-    function fillCidr() { $("targetsInput").value = "10.0.0.0/18"; toast("Wstawiono 10.0.0.0/18 — 16 382 hostów.", "info"); }
+    function applyPreset(preset) {
+      if (preset === '10k') {
+        $("targetsInput").value = "10.0.0.0/18";
+        toast("Preset: 10k+ CIDR Plan (10.0.0.0/18)", "info");
+        return;
+      }
+      const map = {
+        drift: { ports: "2223,3001,5673,8787,15673", label: "Quickstart Drift" },
+        proxy: { ports: "8085,8086,8474", label: "Proxy / Latency" },
+        vuln: { ports: "21,8088,8089,8090", label: "Vulnerable Stack" },
+        modern: { ports: "80,81,443,6379,8080,8081", label: "Modern Stack" },
+      };
+      const cfg = map[preset];
+      if (cfg) {
+        $("allowedPorts").value = cfg.ports;
+        if ($("scanPorts")) $("scanPorts").checked = true;
+        toast(`Preset: ${cfg.label} (${cfg.ports})`, "info");
+      }
+    }
+    function fillCidr() { applyPreset('10k'); }
     function fillDemoTargets() { $("targetsInput").value = "agh-infra.demo\nexample.com"; }
 
     function planCard(p) {
